@@ -1,5 +1,5 @@
 #!/bin/bash
-git submodule update --init  --recursive
+git submodule update --init --recursive
 MACHINE="$(gcc -dumpmachine)"
 # echo Building...
 mkdir -p "build_${MACHINE}"
