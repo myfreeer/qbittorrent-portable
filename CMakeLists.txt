@@ -28,4 +28,5 @@ set (SRC hijack.h)
 aux_source_directory(minhook/src MinHook)
 aux_source_directory(minhook/src/hde MinHook)
 
-add_library(version SHARED version.c version.h dir.h ${SRC} ${MinHook})
+add_library(version SHARED version.c version.h hook_knowndir.h ${SRC} ${MinHook})
+add_library(iphlpapi SHARED iphlpapi.c iphlpapi.h hook_knowndir.h ${SRC} ${MinHook})

@@ -1,4 +1,4 @@
-version: 0.1-{build}
+version: 0.2-{build}
 skip_tags: true
 build_script:
 - cmd: >-
@@ -8,6 +8,6 @@ on_failure:
 - appveyor.exe PushArtifact fail.7z
 test: off
 artifacts:
-- path: binary.7z
-- path: mingw64\version.dll
-- path: mingw32\version.dll
+- path: qbittorrent-portable.7z
+- path: 32bit_iphlpapi.dll
+- path: 64bit_iphlpapi.dll

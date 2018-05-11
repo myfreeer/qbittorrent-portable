@@ -39,7 +39,7 @@ typedef uint32_t MWORD;
 
 extern void DLLHijackAttach(bool isSucceed);
 
-extern void DLLHijackDetach(bool);
+extern void DLLHijackDetach(bool isSucceed);
 
 HINSTANCE hInstance = NULL;
 

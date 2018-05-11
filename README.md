@@ -7,7 +7,7 @@
 [dll-hijack](https://github.com/myfreeer/dll-hijack) based qbittorrent portable plugin.
 
 ## Usage
-Put `version.dll` in the same folder of `qbittorrent.exe`.
+Put `iphlpapi.dll` **or** `version.dll` in the same folder of `qbittorrent.exe`.
 
 ## Compile
 Requirements: git, cmake, mingw gcc, ninja.
