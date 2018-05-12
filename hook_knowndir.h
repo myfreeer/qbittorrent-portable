@@ -12,6 +12,20 @@ typedef HRESULT (WINAPI *pSHGetKnownFolderPath)(
 
 pSHGetKnownFolderPath OriginalSHGetKnownFolderPath = NULL;
 
+/**
+ * GetModulePath
+ * @param {TCHAR *} pDirBuf - destination buffer
+ * @param {DWORD} bufSize - size of buffer
+ * @return {DWORD} length of module path
+ */
+DWORD WINAPI GetModulePath(TCHAR *pDirBuf, DWORD bufSize) {
+	TCHAR* szEnd = NULL;
+	GetModuleFileName(NULL, pDirBuf, bufSize);
+	szEnd = _tcsrchr(pDirBuf, _T('\\'));
+	*(szEnd) = 0;
+	return szEnd - pDirBuf;
+}
+
 HRESULT WINAPI HookSHGetKnownFolderPath(
         _In_     REFKNOWNFOLDERID rfid,
         _In_     DWORD            dwFlags,
@@ -22,11 +36,7 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
             IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||
             IsEqualGUID(rfid, &FOLDERID_RoamingAppData)) {
         TCHAR szDir[MAX_PATH] = { 0 };
-        TCHAR* szEnd = NULL;
-        GetModuleFileName(NULL, szDir, MAX_PATH);
-        szEnd = _tcsrchr(szDir, _T('\\'));
-        *(szEnd) = 0;
-        size_t length = szEnd - szDir;
+        size_t length = GetModulePath(szDir, MAX_PATH);
         PWSTR dirPath = CoTaskMemAlloc((length+1)*sizeof(TCHAR));
         if (dirPath == NULL) {
             return E_FAIL;
