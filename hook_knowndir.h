@@ -35,6 +35,20 @@ DWORD WINAPI GetModulePath(TCHAR *pDirBuf, DWORD bufSize) {
 	return szEnd - pDirBuf;
 }
 
+/**
+ * GetModulePathW
+ * @param {WCHAR *} pDirBuf - destination buffer
+ * @param {DWORD} bufSize - size of buffer
+ * @return {DWORD} length of module path
+ */
+DWORD WINAPI GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
+    WCHAR* szEnd = NULL;
+    GetModuleFileNameW(NULL, pDirBuf, bufSize);
+    szEnd = wcsrchr(pDirBuf, L'\\');
+    *(szEnd) = 0;
+    return szEnd - pDirBuf;
+}
+
 typedef HRESULT (WINAPI *pSHGetKnownFolderPath)(
         _In_     REFKNOWNFOLDERID rfid,
         _In_     DWORD            dwFlags,
@@ -53,13 +67,13 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
     if (IsEqualGUID(rfid, &FOLDERID_Programs) ||
             IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||
             IsEqualGUID(rfid, &FOLDERID_RoamingAppData)) {
-        TCHAR szDir[MAX_PATH] = { 0 };
-        size_t length = GetModulePath(szDir, MAX_PATH);
+        WCHAR szDir[MAX_PATH] = { 0 };
+        size_t length = GetModulePathW(szDir, MAX_PATH);
         PWSTR dirPath = CoTaskMemAlloc((length+1)*sizeof(TCHAR));
         if (dirPath == NULL) {
             return E_FAIL;
         }
-        _tcscpy(dirPath, szDir);
+        wcscpy(dirPath, szDir);
         *ppszPath = dirPath;
 #ifdef HookDebug
         MessageBox(NULL, dirPath, (LPCTSTR) _T("SHGetKnownFolderPath Hook Path"), MB_OK);
@@ -68,18 +82,18 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
     } else return OriginalSHGetKnownFolderPath(rfid, dwFlags, hToken, ppszPath);
 }
 
-typedef WINBOOL (WINAPI *pSHGetSpecialFolderPath) (
+typedef WINBOOL (WINAPI *pSHGetSpecialFolderPathW) (
         HWND   hwndOwner,
-        _Out_ LPTSTR lpszPath,
+        _Out_ LPWSTR lpszPath,
         _In_  int    csidl,
         _In_  BOOL   fCreate
 );
 
-pSHGetSpecialFolderPath OriginalSHGetSpecialFolderPath = NULL;
+pSHGetSpecialFolderPathW OriginalSHGetSpecialFolderPathW = NULL;
 
-WINBOOL WINAPI HookSHGetSpecialFolderPath(
+WINBOOL WINAPI HookSHGetSpecialFolderPathW(
         HWND   hwndOwner,
-        _Out_ LPTSTR lpszPath,
+        _Out_ LPWSTR lpszPath,
         _In_  int    csidl,
         _In_  BOOL   fCreate
 ) {
@@ -90,12 +104,12 @@ WINBOOL WINAPI HookSHGetSpecialFolderPath(
         if (lpszPath == NULL) {
             return FALSE;
         }
-        GetModulePath(lpszPath, MAX_PATH);
+        GetModulePathW(lpszPath, MAX_PATH);
 #ifdef HookDebug
         MessageBox(NULL, lpszPath, (LPCTSTR) _T("SHGetSpecialFolderPath Hook Path"), MB_OK);
 #endif
-        return S_OK;
-    } else return OriginalSHGetSpecialFolderPath(hwndOwner, lpszPath, csidl, fCreate);
+        return TRUE;
+    } else return OriginalSHGetSpecialFolderPathW(hwndOwner, lpszPath, csidl, fCreate);
 }
 
 
@@ -109,9 +123,9 @@ void DLLHijackAttach(bool isSucceed) {
         void *SHGetKnownFolderPath = GetProcAddress(shell32, "SHGetKnownFolderPath");
         MH_STATUS status = CreateMinHook(SHGetKnownFolderPath);
         EnableMinHook(SHGetKnownFolderPath, status);
-        void *SHGetSpecialFolderPath = GetProcAddress(shell32, "SHGetKnownFolderPath");
-        status = CreateMinHook(SHGetSpecialFolderPath);
-        EnableMinHook(SHGetSpecialFolderPath, status);
+        void *SHGetSpecialFolderPathW = GetProcAddress(shell32, "SHGetSpecialFolderPathW");
+        status = CreateMinHook(SHGetSpecialFolderPathW);
+        EnableMinHook(SHGetSpecialFolderPathW, status);
     }
 }
 
