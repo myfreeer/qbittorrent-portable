@@ -114,6 +114,7 @@ bool LoadSysDll(HINSTANCE hModule) {
             lstrcat(szDllPath, TEXT("\\" DLL_NAME ".dll"));
 
             HINSTANCE hDllModule = LoadLibrary(szDllPath);
+            hInstance = hDllModule;
             for (size_t i = 0; i < pimExD->NumberOfNames; i++) {
                 MWORD Original = (MWORD) GetProcAddress(hDllModule, (char *) (pImageBase + pName[i]));
                 if (Original) {
@@ -128,7 +129,6 @@ bool LoadSysDll(HINSTANCE hModule) {
 
 EXTERNC BOOL WINAPI DllMainCRTStartup(HINSTANCE hModule, DWORD dwReason, LPVOID UNUSED pv) {
     if (dwReason == DLL_PROCESS_ATTACH) {
-        hInstance = hModule;
         // 保持系统dll原有功能
         DLLHijackAttach(LoadSysDll(hModule));
     } else if (dwReason == DLL_PROCESS_DETACH) {

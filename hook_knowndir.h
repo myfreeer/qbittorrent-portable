@@ -66,6 +66,11 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
 ) {
     if (IsEqualGUID(rfid, &FOLDERID_Programs) ||
             IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||
+            IsEqualGUID(rfid, &FOLDERID_Desktop) ||
+            IsEqualGUID(rfid, &FOLDERID_Documents) ||
+            // IsEqualGUID(rfid, &FOLDERID_Downloads) ||
+            IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||
+            IsEqualGUID(rfid, &FOLDERID_Profile) ||
             IsEqualGUID(rfid, &FOLDERID_RoamingAppData)) {
         WCHAR szDir[MAX_PATH] = { 0 };
         size_t length = GetModulePathW(szDir, MAX_PATH);
@@ -100,6 +105,11 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathW(
     if (csidl == CSIDL_APPDATA ||
         csidl == CSIDL_PROGRAMS ||
         csidl == CSIDL_COMMON_APPDATA ||
+        csidl == CSIDL_PERSONAL ||
+        csidl == CSIDL_DESKTOP ||
+        csidl == CSIDL_MYDOCUMENTS ||
+        csidl == CSIDL_PROFILE ||
+        csidl == CSIDL_COMMON_DOCUMENTS ||
         csidl == CSIDL_LOCAL_APPDATA) {
         if (lpszPath == NULL) {
             return FALSE;
