@@ -115,15 +115,16 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathA(
         _In_  int    csidl,
         _In_  BOOL   fCreate
 ) {
-    if (csidl == CSIDL_APPDATA ||
-        csidl == CSIDL_PROGRAMS ||
-        csidl == CSIDL_COMMON_APPDATA ||
-        csidl == CSIDL_PERSONAL ||
-        csidl == CSIDL_DESKTOP ||
-        csidl == CSIDL_MYDOCUMENTS ||
-        csidl == CSIDL_PROFILE ||
-        csidl == CSIDL_COMMON_DOCUMENTS ||
-        csidl == CSIDL_LOCAL_APPDATA) {
+    register int csidlLow = csidl & 0xff;
+    if (csidlLow == CSIDL_APPDATA ||
+        csidlLow == CSIDL_PROGRAMS ||
+        csidlLow == CSIDL_COMMON_APPDATA ||
+        csidlLow == CSIDL_PERSONAL ||
+        csidlLow == CSIDL_DESKTOP ||
+        csidlLow == CSIDL_MYDOCUMENTS ||
+        csidlLow == CSIDL_PROFILE ||
+        csidlLow == CSIDL_COMMON_DOCUMENTS ||
+        csidlLow == CSIDL_LOCAL_APPDATA) {
         if (lpszPath == NULL) {
             return FALSE;
         }
@@ -150,15 +151,16 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathW(
         _In_  int    csidl,
         _In_  BOOL   fCreate
 ) {
-    if (csidl == CSIDL_APPDATA ||
-        csidl == CSIDL_PROGRAMS ||
-        csidl == CSIDL_COMMON_APPDATA ||
-        csidl == CSIDL_PERSONAL ||
-        csidl == CSIDL_DESKTOP ||
-        csidl == CSIDL_MYDOCUMENTS ||
-        csidl == CSIDL_PROFILE ||
-        csidl == CSIDL_COMMON_DOCUMENTS ||
-        csidl == CSIDL_LOCAL_APPDATA) {
+    register int csidlLow = csidl & 0xff;
+    if (csidlLow == CSIDL_APPDATA ||
+        csidlLow == CSIDL_PROGRAMS ||
+        csidlLow == CSIDL_COMMON_APPDATA ||
+        csidlLow == CSIDL_PERSONAL ||
+        csidlLow == CSIDL_DESKTOP ||
+        csidlLow == CSIDL_MYDOCUMENTS ||
+        csidlLow == CSIDL_PROFILE ||
+        csidlLow == CSIDL_COMMON_DOCUMENTS ||
+        csidlLow == CSIDL_LOCAL_APPDATA) {
         if (lpszPath == NULL) {
             return FALSE;
         }
