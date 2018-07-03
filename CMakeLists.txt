@@ -20,6 +20,9 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     set(CMAKE_C_FLAGS "-pipe -Wall -Wextra -nostartfiles -Wl,--gc-sections,--build-id=none")
     set(CMAKE_C_FLAGS_DEBUG "-g")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -s")
+    if (CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(CMAKE_C_FLAGS_RELEASE "-Os -s")
+    endif ()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
 endif ()
 
@@ -28,16 +31,15 @@ set (CMAKE_SHARED_MODULE_PREFIX "")
 set (SRC hijack.h)
 aux_source_directory(minhook/src MinHook)
 aux_source_directory(minhook/src/hde MinHook)
-
+find_library(sys_version NAMES version)
 add_library(version SHARED version.c version.h hook_knowndir.h ${SRC} ${MinHook})
 add_library(iphlpapi SHARED iphlpapi.c iphlpapi.h hook_knowndir.h ${SRC} ${MinHook})
 if (ENABLE_TESTS)
     enable_testing()
     add_executable(dir_test test.c)
-    target_link_libraries(dir_test shell32 version uuid ole32)
+    target_link_libraries(dir_test shell32 "${sys_version}" uuid ole32)
     add_custom_target(check
         COMMAND dir_test
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         DEPENDS dir_test version
     )
 endif()
