@@ -21,6 +21,23 @@
     }
 #endif // HookDebug
 
+#define isHookCsidl(csidl)  ((csidl) == CSIDL_APPDATA || \
+        (csidl) == CSIDL_PROGRAMS || \
+        (csidl) == CSIDL_COMMON_APPDATA || \
+        (csidl) == CSIDL_PERSONAL || \
+        (csidl) == CSIDL_DESKTOP || \
+        (csidl) == CSIDL_MYDOCUMENTS || \
+        (csidl) == CSIDL_PROFILE || \
+        (csidl) == CSIDL_COMMON_DOCUMENTS || \
+        (csidl) == CSIDL_LOCAL_APPDATA)
+
+#define isHookRfid(rfid) (IsEqualGUID(rfid, &FOLDERID_Programs) || \
+            IsEqualGUID(rfid, &FOLDERID_LocalAppData) || \
+            IsEqualGUID(rfid, &FOLDERID_Desktop) || \
+            IsEqualGUID(rfid, &FOLDERID_Documents) || \
+            IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) || \
+            IsEqualGUID(rfid, &FOLDERID_Profile) || \
+            IsEqualGUID(rfid, &FOLDERID_RoamingAppData))
 /**
  * GetModulePath
  * @param {TCHAR *} pDirBuf - destination buffer
@@ -77,14 +94,7 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
         _In_opt_ HANDLE           hToken,
         _Out_    PWSTR            *ppszPath
 ) {
-    if (IsEqualGUID(rfid, &FOLDERID_Programs) ||
-            IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||
-            IsEqualGUID(rfid, &FOLDERID_Desktop) ||
-            IsEqualGUID(rfid, &FOLDERID_Documents) ||
-            // IsEqualGUID(rfid, &FOLDERID_Downloads) ||
-            IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||
-            IsEqualGUID(rfid, &FOLDERID_Profile) ||
-            IsEqualGUID(rfid, &FOLDERID_RoamingAppData)) {
+    if (isHookRfid(rfid)) {
         WCHAR szDir[MAX_PATH] = { 0 };
         size_t length = GetModulePathW(szDir, MAX_PATH);
         PWSTR dirPath = CoTaskMemAlloc((length+1)*sizeof(TCHAR));
@@ -116,15 +126,7 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathA(
         _In_  BOOL   fCreate
 ) {
     register int csidlLow = csidl & 0xff;
-    if (csidlLow == CSIDL_APPDATA ||
-        csidlLow == CSIDL_PROGRAMS ||
-        csidlLow == CSIDL_COMMON_APPDATA ||
-        csidlLow == CSIDL_PERSONAL ||
-        csidlLow == CSIDL_DESKTOP ||
-        csidlLow == CSIDL_MYDOCUMENTS ||
-        csidlLow == CSIDL_PROFILE ||
-        csidlLow == CSIDL_COMMON_DOCUMENTS ||
-        csidlLow == CSIDL_LOCAL_APPDATA) {
+    if (isHookCsidl(csidlLow)) {
         if (lpszPath == NULL) {
             return FALSE;
         }
@@ -152,15 +154,7 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathW(
         _In_  BOOL   fCreate
 ) {
     register int csidlLow = csidl & 0xff;
-    if (csidlLow == CSIDL_APPDATA ||
-        csidlLow == CSIDL_PROGRAMS ||
-        csidlLow == CSIDL_COMMON_APPDATA ||
-        csidlLow == CSIDL_PERSONAL ||
-        csidlLow == CSIDL_DESKTOP ||
-        csidlLow == CSIDL_MYDOCUMENTS ||
-        csidlLow == CSIDL_PROFILE ||
-        csidlLow == CSIDL_COMMON_DOCUMENTS ||
-        csidlLow == CSIDL_LOCAL_APPDATA) {
+    if (isHookCsidl(csidlLow)) {
         if (lpszPath == NULL) {
             return FALSE;
         }
@@ -172,6 +166,55 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathW(
     } else return OriginalSHGetSpecialFolderPathW(hwndOwner, lpszPath, csidl, fCreate);
 }
 
+typedef HRESULT (WINAPI *pSHGetSpecialFolderLocation)(
+  HWND             hwnd,
+  int              csidl,
+  PIDLIST_ABSOLUTE *ppidl
+);
+
+pSHGetSpecialFolderLocation OriginalSHGetSpecialFolderLocation = NULL;
+
+HRESULT HookSHGetSpecialFolderLocation(
+  HWND             hwnd,
+  int              csidl,
+  PIDLIST_ABSOLUTE *ppidl
+) {
+    register int csidlLow = csidl & 0xff;
+    if (isHookCsidl(csidlLow)) {
+        WCHAR lpszPath[MAX_PATH] = {0};
+        GetModulePathW(lpszPath, MAX_PATH);
+#ifdef HookDebug
+        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetSpecialFolderLocation Hook Path", MB_OK);
+#endif
+        return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+    } else return OriginalSHGetSpecialFolderLocation(hwnd, csidl, ppidl);
+}
+
+typedef HRESULT (WINAPI *pSHGetKnownFolderIDList)(
+  REFKNOWNFOLDERID rfid,
+  DWORD            dwFlags,
+  HANDLE           hToken,
+  PIDLIST_ABSOLUTE *ppidl
+);
+
+pSHGetKnownFolderIDList OriginalSHGetKnownFolderIDList = NULL;
+
+HRESULT HookSHGetKnownFolderIDList(
+  REFKNOWNFOLDERID rfid,
+  DWORD            dwFlags,
+  HANDLE           hToken,
+  PIDLIST_ABSOLUTE *ppidl
+) {
+    if (isHookRfid(rfid)) {
+        WCHAR lpszPath[MAX_PATH] = {0};
+        GetModulePathW(lpszPath, MAX_PATH);
+#ifdef HookDebug
+        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetKnownFolderIDList Hook Path", MB_OK);
+#endif
+        return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+    } else return OriginalSHGetKnownFolderIDList(rfid, dwFlags, hToken, ppidl);
+
+}
 
 void DLLHijackAttach(bool isSucceed) {
     if (isSucceed) {
@@ -183,12 +226,23 @@ void DLLHijackAttach(bool isSucceed) {
         void *SHGetKnownFolderPath = GetProcAddress(shell32, "SHGetKnownFolderPath");
         MH_STATUS status = CreateMinHook(SHGetKnownFolderPath);
         EnableMinHook(SHGetKnownFolderPath, status);
+
         void *SHGetSpecialFolderPathW = GetProcAddress(shell32, "SHGetSpecialFolderPathW");
         status = CreateMinHook(SHGetSpecialFolderPathW);
         EnableMinHook(SHGetSpecialFolderPathW, status);
+
         void *SHGetSpecialFolderPathA = GetProcAddress(shell32, "SHGetSpecialFolderPathA");
         status = CreateMinHook(SHGetSpecialFolderPathA);
         EnableMinHook(SHGetSpecialFolderPathA, status);
+
+        void *SHGetSpecialFolderLocation = GetProcAddress(shell32, "SHGetSpecialFolderLocation");
+        status = CreateMinHook(SHGetSpecialFolderLocation);
+        EnableMinHook(SHGetSpecialFolderLocation, status);
+
+        void *SHGetKnownFolderIDList = GetProcAddress(shell32, "SHGetKnownFolderIDList");
+        status = CreateMinHook(SHGetKnownFolderIDList);
+        EnableMinHook(SHGetKnownFolderIDList, status);
+
     }
 }
 
