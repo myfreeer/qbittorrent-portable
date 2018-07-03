@@ -6,4 +6,5 @@ mkdir -p "build_${MACHINE}"
 cd "build_${MACHINE}"
 cmake -GNinja ..
 ninja
+ninja check
 cd ..

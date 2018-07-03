@@ -4,6 +4,7 @@ project(dll-hijack C)
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release." FORCE)
 endif (NOT CMAKE_BUILD_TYPE)
+option(ENABLE_TESTS "Enable tests." TRUE)
 
 if (MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MT /wd4996 /wd4068")
@@ -16,7 +17,7 @@ if (MSVC)
 endif ()
 
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    set(CMAKE_C_FLAGS "-pipe -Wall -Wextra -nostartfiles")
+    set(CMAKE_C_FLAGS "-pipe -Wall -Wextra -nostartfiles -Wl,--gc-sections,--build-id=none")
     set(CMAKE_C_FLAGS_DEBUG "-g")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -s")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
@@ -30,3 +31,13 @@ aux_source_directory(minhook/src/hde MinHook)
 
 add_library(version SHARED version.c version.h hook_knowndir.h ${SRC} ${MinHook})
 add_library(iphlpapi SHARED iphlpapi.c iphlpapi.h hook_knowndir.h ${SRC} ${MinHook})
+if (ENABLE_TESTS)
+    enable_testing()
+    add_executable(dir_test test.c)
+    target_link_libraries(dir_test shell32 version uuid ole32)
+    add_custom_target(check
+        COMMAND dir_test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS dir_test version
+    )
+endif()
