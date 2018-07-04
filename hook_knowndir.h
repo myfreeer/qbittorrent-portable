@@ -1,6 +1,7 @@
 #include <tchar.h>
 #include <shlobj.h>
 #include <stdbool.h>
+#include <string.h>
 #include "minhook/include/MinHook.h"
 
 #define CreateMinHook(func) MH_CreateHook(func, &Hook##func, (LPVOID *) &Original##func)
@@ -216,6 +217,132 @@ HRESULT HookSHGetKnownFolderIDList(
 
 }
 
+typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirW)(
+  HWND    hwnd,
+  int     csidl,
+  HANDLE  hToken,
+  DWORD   dwFlags,
+  LPCWSTR pszSubDir,
+  LPWSTR  pszPath
+);
+
+pSHGetFolderPathAndSubDirW OriginalSHGetFolderPathAndSubDirW = NULL;
+
+HRESULT HookSHGetFolderPathAndSubDirW(
+  HWND    hwnd,
+  int     csidl,
+  HANDLE  hToken,
+  DWORD   dwFlags,
+  LPCWSTR pszSubDir,
+  LPWSTR  pszPath
+) {
+    register int csidlLow = csidl & 0xff;
+    if (isHookCsidl(csidlLow)) {
+        GetModulePathW(pszPath, MAX_PATH);
+        if (pszSubDir) {
+            wcscat_s(pszPath, MAX_PATH, L"\\");
+            wcscat_s(pszPath, MAX_PATH, pszSubDir);
+        }
+#ifdef HookDebug
+        MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathAndSubDirW Hook Path", MB_OK);
+#endif
+        if (csidl & CSIDL_FLAG_CREATE) {
+            return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
+        }
+        return S_OK;
+    } else return OriginalSHGetFolderPathAndSubDirW(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
+}
+
+typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirA)(
+  HWND    hwnd,
+  int     csidl,
+  HANDLE  hToken,
+  DWORD   dwFlags,
+  LPCSTR pszSubDir,
+  LPSTR  pszPath
+);
+
+pSHGetFolderPathAndSubDirA OriginalSHGetFolderPathAndSubDirA = NULL;
+
+HRESULT HookSHGetFolderPathAndSubDirA(
+  HWND    hwnd,
+  int     csidl,
+  HANDLE  hToken,
+  DWORD   dwFlags,
+  LPCSTR pszSubDir,
+  LPSTR  pszPath
+) {
+    register int csidlLow = csidl & 0xff;
+    if (isHookCsidl(csidlLow)) {
+        GetModulePathA(pszPath, MAX_PATH);
+        if (pszSubDir) {
+            strcat_s(pszPath, MAX_PATH, "\\");
+            strcat_s(pszPath, MAX_PATH, pszSubDir);
+        }
+#ifdef HookDebug
+        MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathAndSubDirA Hook Path", MB_OK);
+#endif
+        if (csidl & CSIDL_FLAG_CREATE) {
+            return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
+        }
+        return S_OK;
+    } else return OriginalSHGetFolderPathAndSubDirA(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
+}
+
+typedef HRESULT (WINAPI *pSHGetFolderPathW)(
+  HWND   hwnd,
+  int    csidl,
+  HANDLE hToken,
+  DWORD  dwFlags,
+  LPWSTR pszPath
+);
+
+pSHGetFolderPathW OriginalSHGetFolderPathW = NULL;
+
+HRESULT HookSHGetFolderPathW(
+  HWND   hwnd,
+  int    csidl,
+  HANDLE hToken,
+  DWORD  dwFlags,
+  LPWSTR pszPath
+) {
+    register int csidlLow = csidl & 0xff;
+    if (isHookCsidl(csidlLow)) {
+        GetModulePathW(pszPath, MAX_PATH);
+#ifdef HookDebug
+        MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathW Hook Path", MB_OK);
+#endif
+        return S_OK;
+    } else return OriginalSHGetFolderPathW(hwnd, csidl, hToken, dwFlags, pszPath);
+}
+
+typedef HRESULT (WINAPI *pSHGetFolderPathA)(
+  HWND   hwnd,
+  int    csidl,
+  HANDLE hToken,
+  DWORD  dwFlags,
+  LPSTR pszPath
+);
+
+pSHGetFolderPathA OriginalSHGetFolderPathA = NULL;
+
+HRESULT HookSHGetFolderPathA(
+  HWND   hwnd,
+  int    csidl,
+  HANDLE hToken,
+  DWORD  dwFlags,
+  LPSTR pszPath
+) {
+    register int csidlLow = csidl & 0xff;
+    if (isHookCsidl(csidlLow)) {
+        GetModulePathA(pszPath, MAX_PATH);
+#ifdef HookDebug
+        MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathW Hook Path", MB_OK);
+#endif
+        return S_OK;
+    } else return OriginalSHGetFolderPathA(hwnd, csidl, hToken, dwFlags, pszPath);
+}
+
 void DLLHijackAttach(bool isSucceed) {
     if (isSucceed) {
         MH_Initialize();
@@ -242,6 +369,22 @@ void DLLHijackAttach(bool isSucceed) {
         void *SHGetKnownFolderIDList = GetProcAddress(shell32, "SHGetKnownFolderIDList");
         status = CreateMinHook(SHGetKnownFolderIDList);
         EnableMinHook(SHGetKnownFolderIDList, status);
+
+        void *SHGetFolderPathAndSubDirW = GetProcAddress(shell32, "SHGetFolderPathAndSubDirW");
+        status = CreateMinHook(SHGetFolderPathAndSubDirW);
+        EnableMinHook(SHGetFolderPathAndSubDirW, status);
+
+        void *SHGetFolderPathAndSubDirA = GetProcAddress(shell32, "SHGetFolderPathAndSubDirA");
+        status = CreateMinHook(SHGetFolderPathAndSubDirA);
+        EnableMinHook(SHGetFolderPathAndSubDirA, status);
+
+        void *SHGetFolderPathW = GetProcAddress(shell32, "SHGetFolderPathW");
+        status = CreateMinHook(SHGetFolderPathW);
+        EnableMinHook(SHGetFolderPathW, status);
+
+        void *SHGetFolderPathA = GetProcAddress(shell32, "SHGetFolderPathA");
+        status = CreateMinHook(SHGetFolderPathA);
+        EnableMinHook(SHGetFolderPathA, status);
 
     }
 }
