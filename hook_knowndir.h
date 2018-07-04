@@ -7,26 +7,45 @@
 #define CreateMinHook(func)                                                    \
     MH_CreateHook(func, &Hook##func, (LPVOID *)&Original##func)
 #ifdef HookDebug
+#define HookMsg(title, content)                                                \
+    MessageBox(NULL, (LPCTSTR)_T(content), (LPCTSTR)_T(title), MB_OK)
+#define HookMsgA(title, content)                                               \
+    MessageBoxA(NULL, (LPCSTR)(content), (LPCSTR)(title), MB_OK)
+#define HookMsgW(title, content)                                               \
+    MessageBoxW(NULL, (LPCWSTR)(content), (LPCWSTR)(title), MB_OK);
+
 #define EnableMinHook(func, status)                                            \
     if ((status) == MH_OK) {                                                   \
         (status) = MH_EnableHook(func);                                        \
         if ((status) == MH_OK) {                                               \
-            MessageBox(NULL, (LPCTSTR)_T(#func " Hook Succeed"),               \
-                       (LPCTSTR)_T(#func " Hook"), MB_OK);                     \
+            HookMsg((#func " Hook"), (#func " Hook Succeed"));                 \
         } else {                                                               \
-            MessageBox(NULL, (LPCTSTR)_T(#func " Hook Enable Fail"),           \
-                       (LPCTSTR)_T(#func " Hook"), MB_OK);                     \
+            HookMsg((#func " Hook"), (#func " Hook Enable Fail"));             \
         }                                                                      \
     } else {                                                                   \
-        MessageBox(NULL, (LPCTSTR)_T(#func " Hook Fail"),                      \
-                   (LPCTSTR)_T #func(" Hook"), MB_OK);                         \
+        HookMsg(#func " Hook Fail", #func " Hook");                            \
     }
+
+#define DoMinHook(library, function)                                           \
+    {                                                                          \
+        void *function = GetProcAddress(library, #function);                   \
+        if (function) {                                                        \
+            MH_STATUS status = CreateMinHook(function);                        \
+            EnableMinHook(function, status);                                   \
+        } else {                                                               \
+            HookMsg(#function, "Cannot get address of function");              \
+        }                                                                      \
+    }
+
 #else // HookDebug
+#define HookMsg(title, content)
+#define HookMsgA(title, content)
+#define HookMsgW(title, content)
+
 #define EnableMinHook(func, status)                                            \
     if ((status) == MH_OK) {                                                   \
         (status) = MH_EnableHook(func);                                        \
     }
-#endif // HookDebug
 
 #define DoMinHook(library, function)                                           \
     {                                                                          \
@@ -36,6 +55,9 @@
             EnableMinHook(function, status);                                   \
         }                                                                      \
     }
+#endif // HookDebug
+
+
 
 #define isHookCsidl(csidl)                                                     \
     ((csidl) == CSIDL_APPDATA ||                                               \
@@ -123,9 +145,7 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
         }
         wcscpy(dirPath, szDir);
         *ppszPath = dirPath;
-#ifdef HookDebug
-        MessageBoxW(NULL, dirPath, (LPCWSTR) L"SHGetKnownFolderPath Hook Path", MB_OK);
-#endif
+        HookMsgW(L"SHGetKnownFolderPath Hook Path", dirPath);
         return S_OK;
     } else return OriginalSHGetKnownFolderPath(rfid, dwFlags, hToken, ppszPath);
 }
@@ -147,13 +167,8 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathA(
 ) {
     register int csidlLow = csidl & 0xff;
     if (isHookCsidl(csidlLow) && lpszPath) {
-        if (lpszPath == NULL) {
-            return FALSE;
-        }
         GetModulePathA(lpszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxA(NULL, lpszPath, (LPCSTR) "SHGetSpecialFolderPath Hook Path", MB_OK);
-#endif
+        HookMsgA("SHGetSpecialFolderPathA Hook Path", lpszPath);
         return TRUE;
     } else return OriginalSHGetSpecialFolderPathA(hwndOwner, lpszPath, csidl, fCreate);
 }
@@ -175,13 +190,8 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathW(
 ) {
     register int csidlLow = csidl & 0xff;
     if (isHookCsidl(csidlLow) && lpszPath) {
-        if (lpszPath == NULL) {
-            return FALSE;
-        }
         GetModulePathW(lpszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetSpecialFolderPath Hook Path", MB_OK);
-#endif
+        HookMsgW(L"SHGetSpecialFolderPathW Hook Path", lpszPath);
         return TRUE;
     } else return OriginalSHGetSpecialFolderPathW(hwndOwner, lpszPath, csidl, fCreate);
 }
@@ -203,9 +213,7 @@ HRESULT HookSHGetSpecialFolderLocation(
     if (isHookCsidl(csidlLow) && ppidl) {
         WCHAR lpszPath[MAX_PATH] = {0};
         GetModulePathW(lpszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetSpecialFolderLocation Hook Path", MB_OK);
-#endif
+        HookMsgW(L"SHGetSpecialFolderLocation Hook Path", lpszPath);
         return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
     } else return OriginalSHGetSpecialFolderLocation(hwnd, csidl, ppidl);
 }
@@ -228,9 +236,7 @@ HRESULT HookSHGetKnownFolderIDList(
     if (isHookRfid(rfid) && ppidl) {
         WCHAR lpszPath[MAX_PATH] = {0};
         GetModulePathW(lpszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetKnownFolderIDList Hook Path", MB_OK);
-#endif
+        HookMsgW(L"SHGetKnownFolderIDList Hook Path", lpszPath);
         return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
     } else return OriginalSHGetKnownFolderIDList(rfid, dwFlags, hToken, ppidl);
 }
@@ -261,9 +267,7 @@ HRESULT HookSHGetFolderPathAndSubDirW(
             wcscat_s(pszPath, MAX_PATH, L"\\");
             wcscat_s(pszPath, MAX_PATH, pszSubDir);
         }
-#ifdef HookDebug
-        MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathAndSubDirW Hook Path", MB_OK);
-#endif
+        HookMsgW(L"SHGetFolderPathAndSubDirW Hook Path", pszPath);
         if (csidl & CSIDL_FLAG_CREATE) {
             return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
         }
@@ -297,9 +301,7 @@ HRESULT HookSHGetFolderPathAndSubDirA(
             strcat_s(pszPath, MAX_PATH, "\\");
             strcat_s(pszPath, MAX_PATH, pszSubDir);
         }
-#ifdef HookDebug
-        MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathAndSubDirA Hook Path", MB_OK);
-#endif
+        HookMsgA("SHGetFolderPathAndSubDirW Hook Path", pszPath);
         if (csidl & CSIDL_FLAG_CREATE) {
             return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
         }
@@ -327,9 +329,7 @@ HRESULT HookSHGetFolderPathW(
     register int csidlLow = csidl & 0xff;
     if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathW(pszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathW Hook Path", MB_OK);
-#endif
+        HookMsgW(L"SHGetFolderPathW Hook Path", pszPath);
         return S_OK;
     } else return OriginalSHGetFolderPathW(hwnd, csidl, hToken, dwFlags, pszPath);
 }
@@ -354,9 +354,7 @@ HRESULT HookSHGetFolderPathA(
     register int csidlLow = csidl & 0xff;
     if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathA(pszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathA Hook Path", MB_OK);
-#endif
+        HookMsgA("SHGetFolderPathA Hook Path", pszPath);
         return S_OK;
     } else return OriginalSHGetFolderPathA(hwnd, csidl, hToken, dwFlags, pszPath);
 }
@@ -382,9 +380,7 @@ HRESULT HookSHGetFolderLocation(
     if (isHookCsidl(csidlLow) && ppidl) {
         WCHAR lpszPath[MAX_PATH] = {0};
         GetModulePathW(lpszPath, MAX_PATH);
-#ifdef HookDebug
-        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetFolderLocation Hook Path", MB_OK);
-#endif
+        HookMsgW("SHGetFolderLocation Hook Path", lpszPath);
         return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
     } else return OriginalSHGetFolderLocation(hwndOwner, nFolder, hToken, dwReserved, ppidl);
 }
@@ -408,9 +404,7 @@ HRESULT HookSHGetFolderPathEx(
 ) {
     if (isHookRfid(rfid) && pszPath) {
         GetModulePathW(pszPath, cchPath);
-#ifdef HookDebug
-        MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathEx Hook Path", MB_OK);
-#endif
+        HookMsgW("SHGetFolderPathEx Hook Path", pszPath);
         return S_OK;
     } else return OriginalSHGetFolderPathEx(rfid, dwFlags, hToken, pszPath, cchPath);
 }
@@ -418,9 +412,7 @@ HRESULT HookSHGetFolderPathEx(
 void DLLHijackAttach(bool isSucceed) {
     if (isSucceed) {
         MH_Initialize();
-#ifdef HookDebug
-        MessageBox(NULL, TEXT("DLL Hijack Attach Succeed!"), TEXT(DLL_NAME " DLL Hijack Attach"), MB_OK);
-#endif
+        HookMsg((DLL_NAME " DLL Hijack Attach"), "DLL Hijack Attach Succeed!");
         HMODULE shell32 = LoadLibrary((LPCTSTR) _T("shell32.dll"));
 
         DoMinHook(shell32, SHGetKnownFolderPath);
@@ -440,8 +432,6 @@ void DLLHijackAttach(bool isSucceed) {
 void DLLHijackDetach(bool isSucceed) {
     if (isSucceed) {
         MH_Uninitialize();
-#ifdef HookDebug
-        MessageBox(NULL, TEXT("DLL Hijack Detach Succeed!"), TEXT(DLL_NAME " DLL Hijack Detach"), MB_OK);
-#endif
+        HookMsg((DLL_NAME " DLL Hijack Detach"), "DLL Hijack Detach Succeed!");
     }
 }
