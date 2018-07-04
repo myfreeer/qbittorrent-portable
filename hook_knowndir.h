@@ -95,7 +95,7 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
         _In_opt_ HANDLE           hToken,
         _Out_    PWSTR            *ppszPath
 ) {
-    if (isHookRfid(rfid)) {
+    if (isHookRfid(rfid) && ppszPath) {
         WCHAR szDir[MAX_PATH] = { 0 };
         size_t length = GetModulePathW(szDir, MAX_PATH);
         PWSTR dirPath = CoTaskMemAlloc((length+1)*sizeof(TCHAR));
@@ -127,7 +127,7 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathA(
         _In_  BOOL   fCreate
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && lpszPath) {
         if (lpszPath == NULL) {
             return FALSE;
         }
@@ -155,7 +155,7 @@ WINBOOL WINAPI HookSHGetSpecialFolderPathW(
         _In_  BOOL   fCreate
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && lpszPath) {
         if (lpszPath == NULL) {
             return FALSE;
         }
@@ -181,7 +181,7 @@ HRESULT HookSHGetSpecialFolderLocation(
   PIDLIST_ABSOLUTE *ppidl
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && ppidl) {
         WCHAR lpszPath[MAX_PATH] = {0};
         GetModulePathW(lpszPath, MAX_PATH);
 #ifdef HookDebug
@@ -206,7 +206,7 @@ HRESULT HookSHGetKnownFolderIDList(
   HANDLE           hToken,
   PIDLIST_ABSOLUTE *ppidl
 ) {
-    if (isHookRfid(rfid)) {
+    if (isHookRfid(rfid) && ppidl) {
         WCHAR lpszPath[MAX_PATH] = {0};
         GetModulePathW(lpszPath, MAX_PATH);
 #ifdef HookDebug
@@ -237,7 +237,7 @@ HRESULT HookSHGetFolderPathAndSubDirW(
   LPWSTR  pszPath
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathW(pszPath, MAX_PATH);
         if (pszSubDir) {
             wcscat_s(pszPath, MAX_PATH, L"\\");
@@ -258,8 +258,8 @@ typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirA)(
   int     csidl,
   HANDLE  hToken,
   DWORD   dwFlags,
-  LPCSTR pszSubDir,
-  LPSTR  pszPath
+  LPCSTR  pszSubDir,
+  LPSTR   pszPath
 );
 
 pSHGetFolderPathAndSubDirA OriginalSHGetFolderPathAndSubDirA = NULL;
@@ -269,11 +269,11 @@ HRESULT HookSHGetFolderPathAndSubDirA(
   int     csidl,
   HANDLE  hToken,
   DWORD   dwFlags,
-  LPCSTR pszSubDir,
-  LPSTR  pszPath
+  LPCSTR  pszSubDir,
+  LPSTR   pszPath
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathA(pszPath, MAX_PATH);
         if (pszSubDir) {
             strcat_s(pszPath, MAX_PATH, "\\");
@@ -307,7 +307,7 @@ HRESULT HookSHGetFolderPathW(
   LPWSTR pszPath
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathW(pszPath, MAX_PATH);
 #ifdef HookDebug
         MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathW Hook Path", MB_OK);
@@ -321,7 +321,7 @@ typedef HRESULT (WINAPI *pSHGetFolderPathA)(
   int    csidl,
   HANDLE hToken,
   DWORD  dwFlags,
-  LPSTR pszPath
+  LPSTR  pszPath
 );
 
 pSHGetFolderPathA OriginalSHGetFolderPathA = NULL;
@@ -331,10 +331,10 @@ HRESULT HookSHGetFolderPathA(
   int    csidl,
   HANDLE hToken,
   DWORD  dwFlags,
-  LPSTR pszPath
+  LPSTR  pszPath
 ) {
     register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow)) {
+    if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathA(pszPath, MAX_PATH);
 #ifdef HookDebug
         MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathW Hook Path", MB_OK);

@@ -67,7 +67,7 @@ int mainCRTStartup() {
 
     char modulePathA[MAX_PATH] = {0};
     GetModulePathA(modulePathA, MAX_PATH);
-    printf("GetModulePathW: %s\n", modulePathA);
+    printf("GetModulePathA: %s\n", modulePathA);
 
     WCHAR pathW[MAX_PATH] = {0};
     char pathA[MAX_PATH] = {0};
