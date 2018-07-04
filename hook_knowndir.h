@@ -4,41 +4,59 @@
 #include <string.h>
 #include "minhook/include/MinHook.h"
 
-#define CreateMinHook(func) MH_CreateHook(func, &Hook##func, (LPVOID *) &Original##func)
+#define CreateMinHook(func)                                                    \
+    MH_CreateHook(func, &Hook##func, (LPVOID *)&Original##func)
 #ifdef HookDebug
-#define EnableMinHook(func, status) if ((status) == MH_OK) { \
-    (status) = MH_EnableHook(func); \
-        if ((status) == MH_OK) { \
-            MessageBox(NULL,  (LPCTSTR) _T(#func " Hook Succeed"), (LPCTSTR) _T(#func " Hook"), MB_OK); \
-        } else {\
-            MessageBox(NULL,  (LPCTSTR) _T(#func " Hook Enable Fail"), (LPCTSTR) _T(#func " Hook"), MB_OK); \
-        }\
-    } else { \
-        MessageBox(NULL,  (LPCTSTR) _T(#func " Hook Fail"), (LPCTSTR) _T#func (" Hook"), MB_OK); \
+#define EnableMinHook(func, status)                                            \
+    if ((status) == MH_OK) {                                                   \
+        (status) = MH_EnableHook(func);                                        \
+        if ((status) == MH_OK) {                                               \
+            MessageBox(NULL, (LPCTSTR)_T(#func " Hook Succeed"),               \
+                       (LPCTSTR)_T(#func " Hook"), MB_OK);                     \
+        } else {                                                               \
+            MessageBox(NULL, (LPCTSTR)_T(#func " Hook Enable Fail"),           \
+                       (LPCTSTR)_T(#func " Hook"), MB_OK);                     \
+        }                                                                      \
+    } else {                                                                   \
+        MessageBox(NULL, (LPCTSTR)_T(#func " Hook Fail"),                      \
+                   (LPCTSTR)_T #func(" Hook"), MB_OK);                         \
     }
 #else // HookDebug
-#define EnableMinHook(func, status) if ((status) == MH_OK) { \
-    (status) = MH_EnableHook(func); \
+#define EnableMinHook(func, status)                                            \
+    if ((status) == MH_OK) {                                                   \
+        (status) = MH_EnableHook(func);                                        \
     }
 #endif // HookDebug
 
-#define isHookCsidl(csidl)  ((csidl) == CSIDL_APPDATA || \
-        (csidl) == CSIDL_PROGRAMS || \
-        (csidl) == CSIDL_COMMON_APPDATA || \
-        (csidl) == CSIDL_PERSONAL || \
-        (csidl) == CSIDL_DESKTOP || \
-        (csidl) == CSIDL_MYDOCUMENTS || \
-        (csidl) == CSIDL_PROFILE || \
-        (csidl) == CSIDL_COMMON_DOCUMENTS || \
-        (csidl) == CSIDL_LOCAL_APPDATA)
+#define DoMinHook(library, function)                                           \
+    {                                                                          \
+        void *function = GetProcAddress(library, #function);                   \
+        if (function) {                                                        \
+            MH_STATUS status = CreateMinHook(function);                        \
+            EnableMinHook(function, status);                                   \
+        }                                                                      \
+    }
 
-#define isHookRfid(rfid) (IsEqualGUID(rfid, &FOLDERID_Programs) || \
-            IsEqualGUID(rfid, &FOLDERID_LocalAppData) || \
-            IsEqualGUID(rfid, &FOLDERID_Desktop) || \
-            IsEqualGUID(rfid, &FOLDERID_Documents) || \
-            IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) || \
-            IsEqualGUID(rfid, &FOLDERID_Profile) || \
-            IsEqualGUID(rfid, &FOLDERID_RoamingAppData))
+#define isHookCsidl(csidl)                                                     \
+    ((csidl) == CSIDL_APPDATA ||                                               \
+     (csidl) == CSIDL_PROGRAMS ||                                              \
+     (csidl) == CSIDL_COMMON_APPDATA ||                                        \
+     (csidl) == CSIDL_PERSONAL ||                                              \
+     (csidl) == CSIDL_DESKTOP ||                                               \
+     (csidl) == CSIDL_MYDOCUMENTS ||                                           \
+     (csidl) == CSIDL_PROFILE ||                                               \
+     (csidl) == CSIDL_COMMON_DOCUMENTS ||                                      \
+     (csidl) == CSIDL_LOCAL_APPDATA)
+
+#define isHookRfid(rfid)                                                       \
+    (IsEqualGUID(rfid, &FOLDERID_Programs) ||                                  \
+     IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||                              \
+     IsEqualGUID(rfid, &FOLDERID_Desktop) ||                                   \
+     IsEqualGUID(rfid, &FOLDERID_Documents) ||                                 \
+     IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||                           \
+     IsEqualGUID(rfid, &FOLDERID_Profile) ||                                   \
+     IsEqualGUID(rfid, &FOLDERID_RoamingAppData))
+
 /**
  * GetModulePath
  * @param {TCHAR *} pDirBuf - destination buffer
@@ -52,6 +70,7 @@ DWORD WINAPI GetModulePath(TCHAR *pDirBuf, DWORD bufSize) {
 	*(szEnd) = 0;
 	return szEnd - pDirBuf;
 }
+
 /**
  * GetModulePathA
  * @param {CHAR *} pDirBuf - destination buffer
@@ -403,50 +422,18 @@ void DLLHijackAttach(bool isSucceed) {
         MessageBox(NULL, TEXT("DLL Hijack Attach Succeed!"), TEXT(DLL_NAME " DLL Hijack Attach"), MB_OK);
 #endif
         HMODULE shell32 = LoadLibrary((LPCTSTR) _T("shell32.dll"));
-        void *SHGetKnownFolderPath = GetProcAddress(shell32, "SHGetKnownFolderPath");
-        MH_STATUS status = CreateMinHook(SHGetKnownFolderPath);
-        EnableMinHook(SHGetKnownFolderPath, status);
 
-        void *SHGetSpecialFolderPathW = GetProcAddress(shell32, "SHGetSpecialFolderPathW");
-        status = CreateMinHook(SHGetSpecialFolderPathW);
-        EnableMinHook(SHGetSpecialFolderPathW, status);
-
-        void *SHGetSpecialFolderPathA = GetProcAddress(shell32, "SHGetSpecialFolderPathA");
-        status = CreateMinHook(SHGetSpecialFolderPathA);
-        EnableMinHook(SHGetSpecialFolderPathA, status);
-
-        void *SHGetSpecialFolderLocation = GetProcAddress(shell32, "SHGetSpecialFolderLocation");
-        status = CreateMinHook(SHGetSpecialFolderLocation);
-        EnableMinHook(SHGetSpecialFolderLocation, status);
-
-        void *SHGetKnownFolderIDList = GetProcAddress(shell32, "SHGetKnownFolderIDList");
-        status = CreateMinHook(SHGetKnownFolderIDList);
-        EnableMinHook(SHGetKnownFolderIDList, status);
-
-        void *SHGetFolderPathAndSubDirW = GetProcAddress(shell32, "SHGetFolderPathAndSubDirW");
-        status = CreateMinHook(SHGetFolderPathAndSubDirW);
-        EnableMinHook(SHGetFolderPathAndSubDirW, status);
-
-        void *SHGetFolderPathAndSubDirA = GetProcAddress(shell32, "SHGetFolderPathAndSubDirA");
-        status = CreateMinHook(SHGetFolderPathAndSubDirA);
-        EnableMinHook(SHGetFolderPathAndSubDirA, status);
-
-        void *SHGetFolderPathW = GetProcAddress(shell32, "SHGetFolderPathW");
-        status = CreateMinHook(SHGetFolderPathW);
-        EnableMinHook(SHGetFolderPathW, status);
-
-        void *SHGetFolderPathA = GetProcAddress(shell32, "SHGetFolderPathA");
-        status = CreateMinHook(SHGetFolderPathA);
-        EnableMinHook(SHGetFolderPathA, status);
-
-        void *SHGetFolderLocation = GetProcAddress(shell32, "SHGetFolderLocation");
-        status = CreateMinHook(SHGetFolderLocation);
-        EnableMinHook(SHGetFolderLocation, status);
-
-        void *SHGetFolderPathEx = GetProcAddress(shell32, "SHGetFolderPathEx");
-        status = CreateMinHook(SHGetFolderPathEx);
-        EnableMinHook(SHGetFolderPathEx, status);
-
+        DoMinHook(shell32, SHGetKnownFolderPath);
+        DoMinHook(shell32, SHGetSpecialFolderPathW);
+        DoMinHook(shell32, SHGetSpecialFolderPathA);
+        DoMinHook(shell32, SHGetSpecialFolderLocation);
+        DoMinHook(shell32, SHGetKnownFolderIDList);
+        DoMinHook(shell32, SHGetFolderPathAndSubDirW);
+        DoMinHook(shell32, SHGetFolderPathAndSubDirA);
+        DoMinHook(shell32, SHGetFolderPathW);
+        DoMinHook(shell32, SHGetFolderPathA);
+        DoMinHook(shell32, SHGetFolderLocation);
+        DoMinHook(shell32, SHGetFolderPathEx);
     }
 }
 
