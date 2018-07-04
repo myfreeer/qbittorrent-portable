@@ -24,6 +24,13 @@
 
 STDAPI SHGetKnownFolderPath (REFKNOWNFOLDERID rfid, DWORD dwFlags, HANDLE hToken, PWSTR *ppszPath);
 STDAPI SHGetKnownFolderIDList (REFKNOWNFOLDERID rfid, DWORD dwFlags, HANDLE hToken, PIDLIST_ABSOLUTE *ppidl);
+HRESULT WINAPI SHGetFolderPathEx(
+  _In_     REFKNOWNFOLDERID rfid,
+  _In_     DWORD            dwFlags,
+  _In_opt_ HANDLE           hToken,
+  _Out_    LPWSTR           pszPath,
+  _In_     UINT             cchPath
+);
 
 /**
  * GetModulePathA
