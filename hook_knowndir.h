@@ -214,7 +214,6 @@ HRESULT HookSHGetKnownFolderIDList(
 #endif
         return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
     } else return OriginalSHGetKnownFolderIDList(rfid, dwFlags, hToken, ppidl);
-
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirW)(
@@ -337,10 +336,64 @@ HRESULT HookSHGetFolderPathA(
     if (isHookCsidl(csidlLow) && pszPath) {
         GetModulePathA(pszPath, MAX_PATH);
 #ifdef HookDebug
-        MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathW Hook Path", MB_OK);
+        MessageBoxA(NULL, pszPath, (LPCSTR) "SHGetFolderPathA Hook Path", MB_OK);
 #endif
         return S_OK;
     } else return OriginalSHGetFolderPathA(hwnd, csidl, hToken, dwFlags, pszPath);
+}
+
+typedef HRESULT (WINAPI *pSHGetFolderLocation)(
+  _In_        HWND hwndOwner,
+  _In_        int nFolder,
+  _In_        HANDLE hToken,
+  _Reserved_  DWORD dwReserved,
+  _Out_       PIDLIST_ABSOLUTE *ppidl
+);
+
+pSHGetFolderLocation OriginalSHGetFolderLocation = NULL;
+
+HRESULT HookSHGetFolderLocation(
+  _In_        HWND hwndOwner,
+  _In_        int nFolder,
+  _In_        HANDLE hToken,
+  _Reserved_  DWORD dwReserved,
+  _Out_       PIDLIST_ABSOLUTE *ppidl
+) {
+    register int csidlLow = nFolder & 0xff;
+    if (isHookCsidl(csidlLow) && ppidl) {
+        WCHAR lpszPath[MAX_PATH] = {0};
+        GetModulePathW(lpszPath, MAX_PATH);
+#ifdef HookDebug
+        MessageBoxW(NULL, lpszPath, (LPCWSTR) L"SHGetFolderLocation Hook Path", MB_OK);
+#endif
+        return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+    } else return OriginalSHGetFolderLocation(hwndOwner, nFolder, hToken, dwReserved, ppidl);
+}
+
+typedef HRESULT (WINAPI *pSHGetFolderPathEx)(
+  _In_     REFKNOWNFOLDERID rfid,
+  _In_     DWORD            dwFlags,
+  _In_opt_ HANDLE           hToken,
+  _Out_    LPWSTR           pszPath,
+  _In_     UINT             cchPath
+);
+
+pSHGetFolderPathEx OriginalSHGetFolderPathEx = NULL;
+
+HRESULT HookSHGetFolderPathEx(
+  _In_     REFKNOWNFOLDERID rfid,
+  _In_     DWORD            dwFlags,
+  _In_opt_ HANDLE           hToken,
+  _Out_    LPWSTR           pszPath,
+  _In_     UINT             cchPath
+) {
+    if (isHookRfid(rfid) && pszPath) {
+        GetModulePathW(pszPath, cchPath);
+#ifdef HookDebug
+        MessageBoxW(NULL, pszPath, (LPCWSTR) L"SHGetFolderPathEx Hook Path", MB_OK);
+#endif
+        return S_OK;
+    } else return OriginalSHGetFolderPathEx(rfid, dwFlags, hToken, pszPath, cchPath);
 }
 
 void DLLHijackAttach(bool isSucceed) {
@@ -385,6 +438,14 @@ void DLLHijackAttach(bool isSucceed) {
         void *SHGetFolderPathA = GetProcAddress(shell32, "SHGetFolderPathA");
         status = CreateMinHook(SHGetFolderPathA);
         EnableMinHook(SHGetFolderPathA, status);
+
+        void *SHGetFolderLocation = GetProcAddress(shell32, "SHGetFolderLocation");
+        status = CreateMinHook(SHGetFolderLocation);
+        EnableMinHook(SHGetFolderLocation, status);
+
+        void *SHGetFolderPathEx = GetProcAddress(shell32, "SHGetFolderPathEx");
+        status = CreateMinHook(SHGetFolderPathEx);
+        EnableMinHook(SHGetFolderPathEx, status);
 
     }
 }

@@ -71,6 +71,7 @@ int mainCRTStartup() {
 
     WCHAR pathW[MAX_PATH] = {0};
     char pathA[MAX_PATH] = {0};
+
     SHGetSpecialFolderPathW(NULL, pathW, CSIDL_APPDATA, FALSE);
     showInfoW("SHGetSpecialFolderPathW");
     SHGetSpecialFolderPathA(NULL, pathA, CSIDL_APPDATA, FALSE);
@@ -106,6 +107,17 @@ int mainCRTStartup() {
     showInfoW("SHGetFolderPathW");
     SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, pathA);
     showInfoA("SHGetFolderPathA");
+
+    SHGetFolderLocation(NULL, CSIDL_APPDATA, NULL, 0, &pidl);
+    SHGetPathFromIDListW(pidl, pathW);
+    showInfoW("SHGetFolderLocation");
+    SHGetPathFromIDListA(pidl, pathA);
+    showInfoA("SHGetFolderLocation");
+    ILFree(pidl);
+    pidl = 0;
+
+    SHGetFolderPathEx(&FOLDERID_RoamingAppData, 0, NULL, pathW, MAX_PATH);
+    showInfoW("SHGetFolderPathEx");
 
     ExitProcess(0);
     return 0;
