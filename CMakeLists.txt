@@ -43,3 +43,4 @@ if (ENABLE_TESTS)
         DEPENDS dir_test version
     )
 endif()
+add_library(winmm SHARED winmm.c winmm.h ${SRC} ${MinHook})

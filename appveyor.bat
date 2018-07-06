@@ -7,6 +7,7 @@ call C:\msys64\usr\bin\bash -lc "cd \"$APPVEYOR_BUILD_FOLDER\" && exec ./build.s
 mkdir mingw64
 move /Y build_x86_64-w64-mingw32\version.dll  mingw64\version.dll
 move /Y build_x86_64-w64-mingw32\iphlpapi.dll  mingw64\iphlpapi.dll
+move /Y build_x86_64-w64-mingw32\winmm.dll  mingw64\winmm.dll
 
 echo Building 32-bit version...
 set MSYSTEM=MINGW32
@@ -14,6 +15,7 @@ call C:\msys64\usr\bin\bash -lc "cd \"$APPVEYOR_BUILD_FOLDER\" && exec ./build.s
 mkdir mingw32
 move /Y build_i686-w64-mingw32\version.dll  mingw32\version.dll
 move /Y build_i686-w64-mingw32\iphlpapi.dll  mingw32\iphlpapi.dll
+move /Y build_i686-w64-mingw32\winmm.dll  mingw32\winmm.dll
 
 echo Packaging...
 7z a -mx9 -r qbittorrent-portable.7z *.dll
