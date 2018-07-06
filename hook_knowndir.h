@@ -6,7 +6,9 @@
 
 #define CreateMinHook(func)                                                    \
     MH_CreateHook(func, &Hook##func, (LPVOID *)&Original##func)
+
 #ifdef HookDebug
+
 #define HookMsg(title, content)                                                \
     MessageBox(NULL, (LPCTSTR)_T(content), (LPCTSTR)_T(title), MB_OK)
 #define HookMsgA(title, content)                                               \
@@ -37,27 +39,27 @@
         }                                                                      \
     }
 
-#else // HookDebug
+#else // !HookDebug
+
 #define HookMsg(title, content)
 #define HookMsgA(title, content)
 #define HookMsgW(title, content)
 
 #define EnableMinHook(func, status)                                            \
     if ((status) == MH_OK) {                                                   \
-        (status) = MH_EnableHook(func);                                        \
+        MH_EnableHook(func);                                                   \
     }
 
 #define DoMinHook(library, function)                                           \
     {                                                                          \
-        void *function = GetProcAddress(library, #function);                   \
+        void *(function) = GetProcAddress(library, #function);                 \
         if (function) {                                                        \
             MH_STATUS status = CreateMinHook(function);                        \
             EnableMinHook(function, status);                                   \
         }                                                                      \
     }
+
 #endif // HookDebug
-
-
 
 #define isHookCsidl(csidl)                                                     \
     ((csidl) == CSIDL_APPDATA ||                                               \
@@ -83,42 +85,51 @@
  * GetModulePath
  * @param {TCHAR *} pDirBuf - destination buffer
  * @param {DWORD} bufSize - size of buffer
- * @return {DWORD} length of module path
+ * @return {DWORD} length of module path, 0 for failure
  */
 DWORD WINAPI GetModulePath(TCHAR *pDirBuf, DWORD bufSize) {
-	TCHAR* szEnd = NULL;
-	GetModuleFileName(NULL, pDirBuf, bufSize);
-	szEnd = _tcsrchr(pDirBuf, _T('\\'));
-	*(szEnd) = 0;
-	return szEnd - pDirBuf;
+    TCHAR *szEnd = NULL;
+    GetModuleFileName(NULL, pDirBuf, bufSize);
+    szEnd = _tcsrchr(pDirBuf, _T('\\'));
+    if (szEnd) {
+        *(szEnd) = 0;
+        return szEnd - pDirBuf;
+    }
+    return 0;
 }
 
 /**
  * GetModulePathA
  * @param {CHAR *} pDirBuf - destination buffer
  * @param {DWORD} bufSize - size of buffer
- * @return {DWORD} length of module path
+ * @return {DWORD} length of module path, 0 for failure
  */
 DWORD WINAPI GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
     CHAR *szEnd = NULL;
     GetModuleFileNameA(NULL, pDirBuf, bufSize);
     szEnd = strrchr(pDirBuf, '\\');
-    *(szEnd) = 0;
-    return szEnd - pDirBuf;
+    if (szEnd) {
+        *(szEnd) = 0;
+        return szEnd - pDirBuf;
+    }
+    return 0;
 }
 
 /**
  * GetModulePathW
  * @param {WCHAR *} pDirBuf - destination buffer
  * @param {DWORD} bufSize - size of buffer
- * @return {DWORD} length of module path
+ * @return {DWORD} length of module path, 0 for failure
  */
 DWORD WINAPI GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
-    WCHAR* szEnd = NULL;
+    WCHAR *szEnd = NULL;
     GetModuleFileNameW(NULL, pDirBuf, bufSize);
     szEnd = wcsrchr(pDirBuf, L'\\');
-    *(szEnd) = 0;
-    return szEnd - pDirBuf;
+    if (szEnd) {
+        *(szEnd) = 0;
+        return szEnd - pDirBuf;
+    }
+    return 0;
 }
 
 typedef HRESULT (WINAPI *pSHGetKnownFolderPath)(
@@ -266,11 +277,11 @@ HRESULT HookSHGetFolderPathAndSubDirW(
         if (pszSubDir) {
             wcscat_s(pszPath, MAX_PATH, L"\\");
             wcscat_s(pszPath, MAX_PATH, pszSubDir);
+            if (csidl & CSIDL_FLAG_CREATE) {
+                return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
+            }
         }
         HookMsgW(L"SHGetFolderPathAndSubDirW Hook Path", pszPath);
-        if (csidl & CSIDL_FLAG_CREATE) {
-            return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
-        }
         return S_OK;
     } else return OriginalSHGetFolderPathAndSubDirW(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
 }
@@ -300,11 +311,11 @@ HRESULT HookSHGetFolderPathAndSubDirA(
         if (pszSubDir) {
             strcat_s(pszPath, MAX_PATH, "\\");
             strcat_s(pszPath, MAX_PATH, pszSubDir);
+            if (csidl & CSIDL_FLAG_CREATE) {
+                return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
+            }
         }
         HookMsgA("SHGetFolderPathAndSubDirW Hook Path", pszPath);
-        if (csidl & CSIDL_FLAG_CREATE) {
-            return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
-        }
         return S_OK;
     } else return OriginalSHGetFolderPathAndSubDirA(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
 }
