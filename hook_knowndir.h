@@ -70,16 +70,24 @@
      (csidl) == CSIDL_MYDOCUMENTS ||                                           \
      (csidl) == CSIDL_PROFILE ||                                               \
      (csidl) == CSIDL_COMMON_DOCUMENTS ||                                      \
+     (csidl) == CSIDL_PROGRAM_FILES_COMMON ||                                  \
      (csidl) == CSIDL_LOCAL_APPDATA)
 
 #define isHookRfid(rfid)                                                       \
     (IsEqualGUID(rfid, &FOLDERID_Programs) ||                                  \
      IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||                              \
+     IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||                           \
+     IsEqualGUID(rfid, &FOLDERID_RoamingAppData) ||                            \
      IsEqualGUID(rfid, &FOLDERID_Desktop) ||                                   \
      IsEqualGUID(rfid, &FOLDERID_Documents) ||                                 \
-     IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||                           \
      IsEqualGUID(rfid, &FOLDERID_Profile) ||                                   \
-     IsEqualGUID(rfid, &FOLDERID_RoamingAppData))
+     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommon) ||                        \
+     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX64) ||                     \
+     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX86) ||                     \
+     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX86) ||                     \
+     IsEqualGUID(rfid, &FOLDERID_Public) ||                                    \
+     IsEqualGUID(rfid, &FOLDERID_PublicDesktop) ||                             \
+     IsEqualGUID(rfid, &FOLDERID_PublicDocuments))
 
 /**
  * GetModulePath
