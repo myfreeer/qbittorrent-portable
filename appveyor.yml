@@ -11,3 +11,9 @@ artifacts:
 - path: qbittorrent-portable.7z
 - path: 32bit_iphlpapi.dll
 - path: 64bit_iphlpapi.dll
+skip_commits:
+  files:
+    - 'LICENSE'
+    - '*.md'
+    - '.gitingore'
+    - '.gitattributes'
