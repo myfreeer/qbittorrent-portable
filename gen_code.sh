@@ -18,11 +18,16 @@ fi
 
 gen_header() {
     local count=1
+    local dll_exports=( $(gendef -f - "${dll_path}" |
+        sed -r -e '/^[;]/d' -e 's/^([^;].+)( .+)$/\1/g' -e '/^(LIBRARY|EXPORTS)/d') )
     echo "#define DLL_NAME \"${dll_name}\""
     echo "#include \"hijack.h\""
-    echo
-    for i in $(gendef - "${dll_path}" | cut -d'=' -f1 | grep -ivP 'LIBRARY|EXPORTS|;'); do
-        echo "EXPORT ${i}() NOP_FUNC($((count++)));"
+    echo "LIBRARY \"${dll_name}\"" >> "${dll_name}.def"
+    echo "EXPORTS" >> "${dll_name}.def"
+    for i in ${dll_exports[@]}; do
+        local func_name="__place_holder_$((count++))"
+        echo "PLACEHOLDER ${func_name}() NOP_FUNC(__LINE__);"
+        echo "${i} = ${func_name}" >> "${dll_name}.def"
     done
 }
 
@@ -37,5 +42,5 @@ EOF
 echo "Generated ${dll_name}.c"
 
 sed -i "/add_library(${dll_name} SHARED/d" CMakeLists.txt
-echo "add_library(${dll_name} SHARED ${dll_name}.c ${dll_name}.h \${SRC} \${MinHook})" >> CMakeLists.txt
+echo "add_library(${dll_name} SHARED ${dll_name}.c ${dll_name}.h ${dll_name}.def \${SRC} \${MinHook})" >> CMakeLists.txt
 echo Added "${dll_name}" entry to CMakeLists.txt
