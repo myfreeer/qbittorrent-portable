@@ -73,9 +73,10 @@ static bool NtCreateDirectoryW(PCWSTR pszFileName) {
 
 static bool NtCreateDirectoryA(PCSTR pszFileName) {
   WCHAR buffer[MAX_PATH];
-  ULONG outLen = 0;
-  if (!NT_SUCCESS(RtlMultiByteToUnicodeN(buffer, MAX_PATH, &outLen,
-                                         pszFileName, strlen(pszFileName)))) {
+  UNICODE_STRING pathW = {0, MAX_PATH * sizeof(wchar_t), buffer};
+  ANSI_STRING pathA;
+  RtlInitAnsiString(&pathA, pszFileName);
+  if (!NT_SUCCESS(RtlAnsiStringToUnicodeString(&pathW, &pathA, FALSE))) {
     return false;
   }
   return NtCreateDirectoryW(buffer);

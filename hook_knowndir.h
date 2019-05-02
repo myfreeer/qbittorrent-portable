@@ -82,12 +82,14 @@ static bool InitModulePath(void) {
   } else {
     paths.lengthW = sizeW / sizeof(wchar_t);
   }
-  ULONG sizeA = 0L;
-  if (!NT_SUCCESS(RtlUnicodeToMultiByteN(paths.pathA, sizeof(paths.pathA),
-                                         &sizeA, paths.pathW, sizeW))) {
+
+  ANSI_STRING pathA = {0, MAX_PATH, paths.pathA};
+  UNICODE_STRING pathW = {sizeW, MAX_PATH * sizeof(wchar_t), paths.pathW};
+  if (!NT_SUCCESS(RtlUnicodeStringToAnsiString(&pathA, &pathW, FALSE))) {
     return false;
   }
-  paths.lengthA = sizeA / sizeof(char);
+  paths.lengthA = pathA.Length / sizeof(char);
+
   return true;
 }
 
