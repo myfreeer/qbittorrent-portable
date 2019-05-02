@@ -25,7 +25,17 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
         set(CMAKE_C_FLAGS_RELEASE "-Os -s -fmerge-all-constants -fno-asynchronous-unwind-tables")
     endif ()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
-    link_libraries(ntdll ntdllcrt)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/test_mingw_ntdll_crt.c"
+            "size_t __cdecl strlen(const char *_Str);int main(void) {return strlen(\"str\");}")
+    try_compile(NTDLL_RESULT ${CMAKE_CURRENT_BINARY_DIR}
+            "${CMAKE_CURRENT_BINARY_DIR}/test_mingw_ntdll_crt.c"
+            LINK_LIBRARIES ntdllcrt)
+    file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/test_mingw_ntdll_crt.c")
+    if(NTDLL_RESULT)
+        link_libraries(ntdll ntdllcrt)
+    else()
+        link_libraries(ntdll)
+    endif()
 endif ()
 
 set (CMAKE_SHARED_LIBRARY_PREFIX "")
