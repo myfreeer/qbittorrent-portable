@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "minhook/include/MinHook.h"
+#include "native.h"
 
 #ifdef _DEBUG
 #define DebugMsg(format, ...) DbgPrintEx(-1, 0, format, ##__VA_ARGS__)
@@ -22,7 +23,7 @@
      (csidl) == CSIDL_PROGRAM_FILES_COMMON ||                                  \
      (csidl) == CSIDL_LOCAL_APPDATA)
 
-static boolean isHookRfid(const GUID *rfid) {
+static bool isHookRfid(const GUID *rfid) {
   return (IsEqualGUID(rfid, &FOLDERID_Programs) ||
           IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||
           IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||
@@ -40,22 +41,30 @@ static boolean isHookRfid(const GUID *rfid) {
 }
 
 
-static struct _ModulePathBuffer {
-  size_t lengthA;
-  size_t lengthW;
-  char pathA[MAX_PATH];
-  wchar_t pathW[MAX_PATH];
-} paths = {0};
+static ModulePathBuffer paths = {0};
+pCoTaskMemAlloc pfnCoTaskMemAlloc = NULL;
+pSHParseDisplayName pfnSHParseDisplayName = NULL;
+static HookTableSt HookTable[];
 
-NTSYSAPI NTSTATUS RtlUnicodeToMultiByteN(
-    PCHAR MultiByteString,
-    ULONG MaxBytesInMultiByteString,
-    PULONG BytesInMultiByteString,
-    PCWCH UnicodeString,
-    ULONG BytesInUnicodeString
-);
+#define DefineHook(name) name ## Index
+enum _HookTableIndex {
+  DefineHook(SHGetKnownFolderPath) = 0,
+  DefineHook(SHGetSpecialFolderPathW),
+  DefineHook(SHGetSpecialFolderPathA),
+  DefineHook(SHGetSpecialFolderLocation),
+  DefineHook(SHGetKnownFolderIDList),
+  DefineHook(SHGetFolderPathAndSubDirW),
+  DefineHook(SHGetFolderPathAndSubDirA),
+  DefineHook(SHGetFolderPathW),
+  DefineHook(SHGetFolderPathA),
+  DefineHook(SHGetFolderLocation),
+  DefineHook(SHGetFolderPathEx),
+  _HookLength
+};
+#undef DefineHook
+#define OriginalFunc(func) ((p ## func)(HookTable[func ## Index].original))
 
-boolean InitModulePath(void) {
+static bool InitModulePath(void) {
   PTEB teb = NtCurrentTeb();
   // PEB->ImageBaseAddress
   HANDLE hModule = teb->ProcessEnvironmentBlock->Reserved3[1];
@@ -88,7 +97,7 @@ boolean InitModulePath(void) {
  * @param {DWORD} bufSize - size of buffer
  * @return {DWORD} length of module path, 0 for failure
  */
-DWORD WINAPI GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
+static DWORD GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
   if (!pDirBuf || !bufSize) return 0;
   const DWORD size = min(bufSize, paths.lengthA);
   memcpy(pDirBuf, paths.pathA, size);
@@ -101,120 +110,12 @@ DWORD WINAPI GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
  * @param {DWORD} bufSize - size of buffer
  * @return {DWORD} length of module path, 0 for failure
  */
-DWORD WINAPI GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
+static DWORD GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
   if (!pDirBuf || !bufSize) return 0;
   const DWORD size = min(bufSize, paths.lengthW * sizeof(wchar_t));
   memcpy(pDirBuf, paths.pathW, size);
   return size / sizeof(wchar_t);
 }
-
-NTSYSAPI NTSTATUS RtlMultiByteToUnicodeN(
-    PWCH UnicodeString,
-    ULONG MaxBytesInUnicodeString,
-    PULONG BytesInUnicodeString,
-    const CHAR *MultiByteString,
-    ULONG BytesInMultiByteString
-);
-
-bool
-NtCreateDirectoryW(PCWSTR pszFileName) {
-  NTSTATUS Status;
-  UNICODE_STRING FileName;
-  HANDLE DirectoryHandle;
-  IO_STATUS_BLOCK IoStatus;
-  OBJECT_ATTRIBUTES ObjectAttributes;
-
-  RtlInitUnicodeString(&FileName, pszFileName);
-  InitializeObjectAttributes(&ObjectAttributes, &FileName, 0, NULL, NULL);
-
-  Status = NtCreateFile(&DirectoryHandle,
-                        GENERIC_READ | GENERIC_WRITE,
-                        &ObjectAttributes,
-                        &IoStatus,
-                        NULL,
-                        FILE_ATTRIBUTE_NORMAL,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                        FILE_CREATE,
-                        FILE_DIRECTORY_FILE,
-                        NULL,
-                        0);
-
-  if (NT_SUCCESS(Status)) {
-    NtClose(DirectoryHandle);
-    return true;
-  }
-  return false;
-}
-
-bool
-NtCreateDirectoryA(PCSTR pszFileName) {
-  WCHAR buffer[MAX_PATH];
-  ULONG outLen = 0;
-  if (!NT_SUCCESS(RtlMultiByteToUnicodeN(buffer, MAX_PATH, &outLen, pszFileName, strlen(pszFileName)))) {
-    return false;
-  }
-  return NtCreateDirectoryW(buffer);
-}
-
-void *LdrGetDllFunction(const wchar_t *dll, const char *fn) {
-  UNICODE_STRING dllu;
-  RtlInitUnicodeString(&dllu, dll);
-
-  PVOID handle;
-  NTSTATUS status = LdrGetDllHandle(NULL, NULL, &dllu, &handle);
-
-  if (!NT_SUCCESS(status))
-    status = LdrLoadDll(NULL, NULL, &dllu, &handle);
-
-  if (!NT_SUCCESS(status))
-    return NULL;
-
-  ANSI_STRING fna;
-  RtlInitAnsiString(&fna, fn);
-
-  PVOID proc;
-  status = LdrGetProcedureAddress(handle, &fna, 0, &proc);
-
-  return NT_SUCCESS(status) ? proc : NULL;
-}
-
-typedef LPVOID (WINAPI *pCoTaskMemAlloc)(SIZE_T cb);
-
-pCoTaskMemAlloc pfnCoTaskMemAlloc = NULL;
-
-typedef HRESULT (WINAPI *pSHParseDisplayName)(
-    PCWSTR pszName,
-    IBindCtx *pbc,
-    PIDLIST_ABSOLUTE *ppidl,
-    SFGAOF sfgaoIn,
-    SFGAOF *psfgaoOut);
-
-pSHParseDisplayName pfnSHParseDisplayName = NULL;
-
-typedef struct _HookTable {
-  void *original;
-  void *hook;
-  char *name;
-} HookTableSt;
-static HookTableSt HookTable[];
-
-#define DefineHook(name) name ## Index
-enum _HookTableIndex {
-  DefineHook(SHGetKnownFolderPath) = 0,
-  DefineHook(SHGetSpecialFolderPathW),
-  DefineHook(SHGetSpecialFolderPathA),
-  DefineHook(SHGetSpecialFolderLocation),
-  DefineHook(SHGetKnownFolderIDList),
-  DefineHook(SHGetFolderPathAndSubDirW),
-  DefineHook(SHGetFolderPathAndSubDirA),
-  DefineHook(SHGetFolderPathW),
-  DefineHook(SHGetFolderPathA),
-  DefineHook(SHGetFolderLocation),
-  DefineHook(SHGetFolderPathEx),
-  _HookLength
-};
-#undef DefineHook
-#define OriginalFunc(func) ((p ## func)(HookTable[func ## Index].original))
 
 typedef HRESULT (WINAPI *pSHGetKnownFolderPath)(
     _In_     REFKNOWNFOLDERID rfid,
@@ -555,6 +456,6 @@ void DLLHijackAttach(bool isSucceed) {
 void DLLHijackDetach(bool isSucceed) {
   if (isSucceed) {
     MH_Uninitialize();
-    DebugMsg(DLL_NAME " DLL Hijack DetachSucceed");
+    DebugMsg(DLL_NAME  " DLL Hijack DetachSucceed");
   }
 }
