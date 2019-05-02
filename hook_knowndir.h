@@ -4,6 +4,12 @@
 #include <string.h>
 #include "minhook/include/MinHook.h"
 
+#ifdef _DEBUG
+#define DebugMsg(format, ...) DbgPrintEx(-1, 0, format, ##__VA_ARGS__)
+#else
+#define DebugMsg(format, ...)
+#endif
+
 #define isHookCsidl(csidl)                                                     \
     ((csidl) == CSIDL_APPDATA ||                                               \
      (csidl) == CSIDL_PROGRAMS ||                                              \
@@ -33,11 +39,6 @@ static boolean isHookRfid(const GUID *rfid) {
           IsEqualGUID(rfid, &FOLDERID_PublicDocuments));
 }
 
-#ifdef _DEBUG
-#define DebugMsg(format, ...) DbgPrintEx(-1, 0, format, ##__VA_ARGS__)
-#else
-#define DebugMsg(format, ...)
-#endif
 
 static struct _ModulePathBuffer {
   size_t lengthA;
@@ -107,6 +108,89 @@ DWORD WINAPI GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
   return size / sizeof(wchar_t);
 }
 
+NTSYSAPI NTSTATUS RtlMultiByteToUnicodeN(
+    PWCH UnicodeString,
+    ULONG MaxBytesInUnicodeString,
+    PULONG BytesInUnicodeString,
+    const CHAR *MultiByteString,
+    ULONG BytesInMultiByteString
+);
+
+bool
+NtCreateDirectoryW(PCWSTR pszFileName) {
+  NTSTATUS Status;
+  UNICODE_STRING FileName;
+  HANDLE DirectoryHandle;
+  IO_STATUS_BLOCK IoStatus;
+  OBJECT_ATTRIBUTES ObjectAttributes;
+
+  RtlInitUnicodeString(&FileName, pszFileName);
+  InitializeObjectAttributes(&ObjectAttributes, &FileName, 0, NULL, NULL);
+
+  Status = NtCreateFile(&DirectoryHandle,
+                        GENERIC_READ | GENERIC_WRITE,
+                        &ObjectAttributes,
+                        &IoStatus,
+                        NULL,
+                        FILE_ATTRIBUTE_NORMAL,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_CREATE,
+                        FILE_DIRECTORY_FILE,
+                        NULL,
+                        0);
+
+  if (NT_SUCCESS(Status)) {
+    NtClose(DirectoryHandle);
+    return true;
+  }
+  return false;
+}
+
+bool
+NtCreateDirectoryA(PCSTR pszFileName) {
+  WCHAR buffer[MAX_PATH];
+  ULONG outLen = 0;
+  if (!NT_SUCCESS(RtlMultiByteToUnicodeN(buffer, MAX_PATH, &outLen, pszFileName, strlen(pszFileName)))) {
+    return false;
+  }
+  return NtCreateDirectoryW(buffer);
+}
+
+void *LdrGetDllFunction(const wchar_t *dll, const char *fn) {
+  UNICODE_STRING dllu;
+  RtlInitUnicodeString(&dllu, dll);
+
+  PVOID handle;
+  NTSTATUS status = LdrGetDllHandle(NULL, NULL, &dllu, &handle);
+
+  if (!NT_SUCCESS(status))
+    status = LdrLoadDll(NULL, NULL, &dllu, &handle);
+
+  if (!NT_SUCCESS(status))
+    return NULL;
+
+  ANSI_STRING fna;
+  RtlInitAnsiString(&fna, fn);
+
+  PVOID proc;
+  status = LdrGetProcedureAddress(handle, &fna, 0, &proc);
+
+  return NT_SUCCESS(status) ? proc : NULL;
+}
+
+typedef LPVOID (WINAPI *pCoTaskMemAlloc)(SIZE_T cb);
+
+pCoTaskMemAlloc pfnCoTaskMemAlloc = NULL;
+
+typedef HRESULT (WINAPI *pSHParseDisplayName)(
+    PCWSTR pszName,
+    IBindCtx *pbc,
+    PIDLIST_ABSOLUTE *ppidl,
+    SFGAOF sfgaoIn,
+    SFGAOF *psfgaoOut);
+
+pSHParseDisplayName pfnSHParseDisplayName = NULL;
+
 typedef struct _HookTable {
   void *original;
   void *hook;
@@ -148,7 +232,14 @@ HRESULT WINAPI HookSHGetKnownFolderPath(
   if (isHookRfid(rfid) && ppszPath) {
     WCHAR szDir[MAX_PATH] = {0};
     size_t length = GetModulePathW(szDir, MAX_PATH);
-    PWSTR dirPath = CoTaskMemAlloc((length + 1) * sizeof(TCHAR));
+
+    if (!pfnCoTaskMemAlloc) {
+      pfnCoTaskMemAlloc = LdrGetDllFunction(L"ole32.dll", "CoTaskMemAlloc");
+    }
+    if (!pfnCoTaskMemAlloc) {
+      return E_FAIL;
+    }
+    PWSTR dirPath = pfnCoTaskMemAlloc((length + 1) * sizeof(TCHAR));
     if (dirPath == NULL) {
       return E_FAIL;
     }
@@ -217,7 +308,13 @@ HRESULT HookSHGetSpecialFolderLocation(
     WCHAR lpszPath[MAX_PATH] = {0};
     GetModulePathW(lpszPath, MAX_PATH);
     DebugMsg("SHGetSpecialFolderLocation Hook Path: %ls", lpszPath);
-    return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+    if (!pfnSHParseDisplayName) {
+      pfnSHParseDisplayName = LdrGetDllFunction(L"shell32.dll", "SHParseDisplayName");
+    }
+    if (!pfnSHParseDisplayName) {
+      return E_FAIL;
+    }
+    return pfnSHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
   } else return OriginalFunc(SHGetSpecialFolderLocation)(hwnd, csidl, ppidl);
 }
 
@@ -238,7 +335,13 @@ HRESULT HookSHGetKnownFolderIDList(
     WCHAR lpszPath[MAX_PATH] = {0};
     GetModulePathW(lpszPath, MAX_PATH);
     DebugMsg("SHGetKnownFolderIDList Hook Path: %ls", lpszPath);
-    return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+    if (!pfnSHParseDisplayName) {
+      pfnSHParseDisplayName = LdrGetDllFunction(L"shell32.dll", "SHParseDisplayName");
+    }
+    if (!pfnSHParseDisplayName) {
+      return E_FAIL;
+    }
+    return pfnSHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
   } else return OriginalFunc(SHGetKnownFolderIDList)(rfid, dwFlags, hToken, ppidl);
 }
 
@@ -266,7 +369,7 @@ HRESULT HookSHGetFolderPathAndSubDirW(
       wcscat_s(pszPath, MAX_PATH, L"\\");
       wcscat_s(pszPath, MAX_PATH, pszSubDir);
       if (csidl & CSIDL_FLAG_CREATE) {
-        return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
+        return NtCreateDirectoryW(pszPath) ? S_OK : S_FALSE;
       }
     }
     DebugMsg("SHGetFolderPathAndSubDirW Hook Path: %ls", pszPath);
@@ -298,7 +401,7 @@ HRESULT HookSHGetFolderPathAndSubDirA(
       strcat_s(pszPath, MAX_PATH, "\\");
       strcat_s(pszPath, MAX_PATH, pszSubDir);
       if (csidl & CSIDL_FLAG_CREATE) {
-        return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
+        return NtCreateDirectoryA(pszPath) ? S_OK : S_FALSE;
       }
     }
     DebugMsg("SHGetFolderPathAndSubDirW Hook Path: %s", pszPath);
@@ -373,7 +476,13 @@ HRESULT HookSHGetFolderLocation(
     WCHAR lpszPath[MAX_PATH] = {0};
     GetModulePathW(lpszPath, MAX_PATH);
     DebugMsg("SHGetFolderLocation Hook Path: %ls", lpszPath);
-    return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+    if (!pfnSHParseDisplayName) {
+      pfnSHParseDisplayName = LdrGetDllFunction(L"shell32.dll", "SHParseDisplayName");
+    }
+    if (!pfnSHParseDisplayName) {
+      return E_FAIL;
+    }
+    return pfnSHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
   } else return OriginalFunc(SHGetFolderLocation)(hwndOwner, nFolder, hToken, dwReserved, ppidl);
 }
 
