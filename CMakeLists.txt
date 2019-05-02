@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 2.8)
-project(dll-hijack C)
+cmake_minimum_required(VERSION 3.1)
+project(qbittorrent-portable C)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release." FORCE)
