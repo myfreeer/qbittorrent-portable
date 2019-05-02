@@ -4,63 +4,6 @@
 #include <string.h>
 #include "minhook/include/MinHook.h"
 
-#define CreateMinHook(func)                                                    \
-    MH_CreateHook(func, &Hook##func, (LPVOID *)&Original##func)
-
-#ifdef HookDebug
-
-#define HookMsg(title, content)                                                \
-    MessageBox(NULL, (LPCTSTR)_T(content), (LPCTSTR)_T(title), MB_OK)
-#define HookMsgA(title, content)                                               \
-    MessageBoxA(NULL, (LPCSTR)(content), (LPCSTR)(title), MB_OK)
-#define HookMsgW(title, content)                                               \
-    MessageBoxW(NULL, (LPCWSTR)(content), (LPCWSTR)(title), MB_OK);
-
-#define EnableMinHook(func, status)                                            \
-    if ((status) == MH_OK) {                                                   \
-        (status) = MH_EnableHook(func);                                        \
-        if ((status) == MH_OK) {                                               \
-            HookMsg((#func " Hook"), (#func " Hook Succeed"));                 \
-        } else {                                                               \
-            HookMsg((#func " Hook"), (#func " Hook Enable Fail"));             \
-        }                                                                      \
-    } else {                                                                   \
-        HookMsg(#func " Hook Fail", #func " Hook");                            \
-    }
-
-#define DoMinHook(library, function)                                           \
-    {                                                                          \
-        void *function = GetProcAddress(library, #function);                   \
-        if (function) {                                                        \
-            MH_STATUS status = CreateMinHook(function);                        \
-            EnableMinHook(function, status);                                   \
-        } else {                                                               \
-            HookMsg(#function, "Cannot get address of function");              \
-        }                                                                      \
-    }
-
-#else // !HookDebug
-
-#define HookMsg(title, content)
-#define HookMsgA(title, content)
-#define HookMsgW(title, content)
-
-#define EnableMinHook(func, status)                                            \
-    if ((status) == MH_OK) {                                                   \
-        MH_EnableHook(func);                                                   \
-    }
-
-#define DoMinHook(library, function)                                           \
-    {                                                                          \
-        void *(function) = GetProcAddress(library, #function);                 \
-        if (function) {                                                        \
-            MH_STATUS status = CreateMinHook(function);                        \
-            EnableMinHook(function, status);                                   \
-        }                                                                      \
-    }
-
-#endif // HookDebug
-
 #define isHookCsidl(csidl)                                                     \
     ((csidl) == CSIDL_APPDATA ||                                               \
      (csidl) == CSIDL_PROGRAMS ||                                              \
@@ -73,37 +16,69 @@
      (csidl) == CSIDL_PROGRAM_FILES_COMMON ||                                  \
      (csidl) == CSIDL_LOCAL_APPDATA)
 
-#define isHookRfid(rfid)                                                       \
-    (IsEqualGUID(rfid, &FOLDERID_Programs) ||                                  \
-     IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||                              \
-     IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||                           \
-     IsEqualGUID(rfid, &FOLDERID_RoamingAppData) ||                            \
-     IsEqualGUID(rfid, &FOLDERID_Desktop) ||                                   \
-     IsEqualGUID(rfid, &FOLDERID_Documents) ||                                 \
-     IsEqualGUID(rfid, &FOLDERID_Profile) ||                                   \
-     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommon) ||                        \
-     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX64) ||                     \
-     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX86) ||                     \
-     IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX86) ||                     \
-     IsEqualGUID(rfid, &FOLDERID_Public) ||                                    \
-     IsEqualGUID(rfid, &FOLDERID_PublicDesktop) ||                             \
-     IsEqualGUID(rfid, &FOLDERID_PublicDocuments))
+static boolean isHookRfid(const GUID *rfid) {
+  return (IsEqualGUID(rfid, &FOLDERID_Programs) ||
+          IsEqualGUID(rfid, &FOLDERID_LocalAppData) ||
+          IsEqualGUID(rfid, &FOLDERID_LocalAppDataLow) ||
+          IsEqualGUID(rfid, &FOLDERID_RoamingAppData) ||
+          IsEqualGUID(rfid, &FOLDERID_Desktop) ||
+          IsEqualGUID(rfid, &FOLDERID_Documents) ||
+          IsEqualGUID(rfid, &FOLDERID_Profile) ||
+          IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommon) ||
+          IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX64) ||
+          IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX86) ||
+          IsEqualGUID(rfid, &FOLDERID_ProgramFilesCommonX86) ||
+          IsEqualGUID(rfid, &FOLDERID_Public) ||
+          IsEqualGUID(rfid, &FOLDERID_PublicDesktop) ||
+          IsEqualGUID(rfid, &FOLDERID_PublicDocuments));
+}
 
-/**
- * GetModulePath
- * @param {TCHAR *} pDirBuf - destination buffer
- * @param {DWORD} bufSize - size of buffer
- * @return {DWORD} length of module path, 0 for failure
- */
-DWORD WINAPI GetModulePath(TCHAR *pDirBuf, DWORD bufSize) {
-    TCHAR *szEnd = NULL;
-    GetModuleFileName(NULL, pDirBuf, bufSize);
-    szEnd = _tcsrchr(pDirBuf, _T('\\'));
-    if (szEnd) {
-        *(szEnd) = 0;
-        return szEnd - pDirBuf;
-    }
-    return 0;
+#ifdef _DEBUG
+#define DebugMsg(format, ...) DbgPrintEx(-1, 0, format, ##__VA_ARGS__)
+#else
+#define DebugMsg(format, ...)
+#endif
+
+static struct _ModulePathBuffer {
+  size_t lengthA;
+  size_t lengthW;
+  char pathA[MAX_PATH];
+  wchar_t pathW[MAX_PATH];
+} paths = {0};
+
+NTSYSAPI NTSTATUS RtlUnicodeToMultiByteN(
+    PCHAR MultiByteString,
+    ULONG MaxBytesInMultiByteString,
+    PULONG BytesInMultiByteString,
+    PCWCH UnicodeString,
+    ULONG BytesInUnicodeString
+);
+
+boolean InitModulePath(void) {
+  PTEB teb = NtCurrentTeb();
+  // PEB->ImageBaseAddress
+  HANDLE hModule = teb->ProcessEnvironmentBlock->Reserved3[1];
+  PLDR_DATA_TABLE_ENTRY pEntry;
+  if (!NT_SUCCESS(LdrFindEntryForAddress(hModule, &pEntry))) {
+    return false;
+  }
+  size_t sizeW = min(sizeof(paths.pathW), pEntry->FullDllName.Length);
+  memcpy(paths.pathW, pEntry->FullDllName.Buffer, sizeW);
+  wchar_t *pathEnd = wcsrchr(paths.pathW, L'\\');
+  if (pathEnd) {
+    *pathEnd = 0;
+    paths.lengthW = pathEnd - paths.pathW;
+    sizeW = paths.lengthW * sizeof(wchar_t);
+  } else {
+    paths.lengthW = sizeW / sizeof(wchar_t);
+  }
+  ULONG sizeA = 0L;
+  if (!NT_SUCCESS(RtlUnicodeToMultiByteN(paths.pathA, sizeof(paths.pathA),
+                                         &sizeA, paths.pathW, sizeW))) {
+    return false;
+  }
+  paths.lengthA = sizeA / sizeof(char);
+  return true;
 }
 
 /**
@@ -113,14 +88,10 @@ DWORD WINAPI GetModulePath(TCHAR *pDirBuf, DWORD bufSize) {
  * @return {DWORD} length of module path, 0 for failure
  */
 DWORD WINAPI GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
-    CHAR *szEnd = NULL;
-    GetModuleFileNameA(NULL, pDirBuf, bufSize);
-    szEnd = strrchr(pDirBuf, '\\');
-    if (szEnd) {
-        *(szEnd) = 0;
-        return szEnd - pDirBuf;
-    }
-    return 0;
+  if (!pDirBuf || !bufSize) return 0;
+  const DWORD size = min(bufSize, paths.lengthA);
+  memcpy(pDirBuf, paths.pathA, size);
+  return size;
 }
 
 /**
@@ -130,327 +101,351 @@ DWORD WINAPI GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
  * @return {DWORD} length of module path, 0 for failure
  */
 DWORD WINAPI GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
-    WCHAR *szEnd = NULL;
-    GetModuleFileNameW(NULL, pDirBuf, bufSize);
-    szEnd = wcsrchr(pDirBuf, L'\\');
-    if (szEnd) {
-        *(szEnd) = 0;
-        return szEnd - pDirBuf;
-    }
-    return 0;
+  if (!pDirBuf || !bufSize) return 0;
+  const DWORD size = min(bufSize, paths.lengthW * sizeof(wchar_t));
+  memcpy(pDirBuf, paths.pathW, size);
+  return size / sizeof(wchar_t);
 }
+
+typedef struct _HookTable {
+  void *original;
+  void *hook;
+  char *name;
+} HookTableSt;
+static HookTableSt HookTable[];
+
+#define DefineHook(name) name ## Index
+enum _HookTableIndex {
+  DefineHook(SHGetKnownFolderPath) = 0,
+  DefineHook(SHGetSpecialFolderPathW),
+  DefineHook(SHGetSpecialFolderPathA),
+  DefineHook(SHGetSpecialFolderLocation),
+  DefineHook(SHGetKnownFolderIDList),
+  DefineHook(SHGetFolderPathAndSubDirW),
+  DefineHook(SHGetFolderPathAndSubDirA),
+  DefineHook(SHGetFolderPathW),
+  DefineHook(SHGetFolderPathA),
+  DefineHook(SHGetFolderLocation),
+  DefineHook(SHGetFolderPathEx),
+  _HookLength
+};
+#undef DefineHook
+#define OriginalFunc(func) ((p ## func)(HookTable[func ## Index].original))
 
 typedef HRESULT (WINAPI *pSHGetKnownFolderPath)(
-        _In_     REFKNOWNFOLDERID rfid,
-        _In_     DWORD            dwFlags,
-        _In_opt_ HANDLE           hToken,
-        _Out_    PWSTR            *ppszPath
+    _In_     REFKNOWNFOLDERID rfid,
+    _In_     DWORD dwFlags,
+    _In_opt_ HANDLE hToken,
+    _Out_    PWSTR *ppszPath
 );
-
-pSHGetKnownFolderPath OriginalSHGetKnownFolderPath = NULL;
 
 HRESULT WINAPI HookSHGetKnownFolderPath(
-        _In_     REFKNOWNFOLDERID rfid,
-        _In_     DWORD            dwFlags,
-        _In_opt_ HANDLE           hToken,
-        _Out_    PWSTR            *ppszPath
+    _In_     REFKNOWNFOLDERID rfid,
+    _In_     DWORD dwFlags,
+    _In_opt_ HANDLE hToken,
+    _Out_    PWSTR *ppszPath
 ) {
-    if (isHookRfid(rfid) && ppszPath) {
-        WCHAR szDir[MAX_PATH] = { 0 };
-        size_t length = GetModulePathW(szDir, MAX_PATH);
-        PWSTR dirPath = CoTaskMemAlloc((length+1)*sizeof(TCHAR));
-        if (dirPath == NULL) {
-            return E_FAIL;
-        }
-        wcscpy(dirPath, szDir);
-        *ppszPath = dirPath;
-        HookMsgW(L"SHGetKnownFolderPath Hook Path", dirPath);
-        return S_OK;
-    } else return OriginalSHGetKnownFolderPath(rfid, dwFlags, hToken, ppszPath);
+  if (isHookRfid(rfid) && ppszPath) {
+    WCHAR szDir[MAX_PATH] = {0};
+    size_t length = GetModulePathW(szDir, MAX_PATH);
+    PWSTR dirPath = CoTaskMemAlloc((length + 1) * sizeof(TCHAR));
+    if (dirPath == NULL) {
+      return E_FAIL;
+    }
+    wcscpy(dirPath, szDir);
+    *ppszPath = dirPath;
+    DebugMsg("SHGetKnownFolderPath Hook Path: %ls", dirPath);
+    return S_OK;
+  } else return OriginalFunc(SHGetKnownFolderPath)(rfid, dwFlags, hToken, ppszPath);
 }
 
-typedef WINBOOL (WINAPI *pSHGetSpecialFolderPathA) (
-        HWND   hwndOwner,
-        _Out_ LPSTR  lpszPath,
-        _In_  int    csidl,
-        _In_  BOOL   fCreate
+typedef WINBOOL (WINAPI *pSHGetSpecialFolderPathA)(
+    HWND hwndOwner,
+    _Out_ LPSTR lpszPath,
+    _In_  int csidl,
+    _In_  BOOL fCreate
 );
-
-pSHGetSpecialFolderPathA OriginalSHGetSpecialFolderPathA = NULL;
 
 WINBOOL WINAPI HookSHGetSpecialFolderPathA(
-        HWND   hwndOwner,
-        _Out_ LPSTR  lpszPath,
-        _In_  int    csidl,
-        _In_  BOOL   fCreate
+    HWND hwndOwner,
+    _Out_ LPSTR lpszPath,
+    _In_  int csidl,
+    _In_  BOOL fCreate
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && lpszPath) {
-        GetModulePathA(lpszPath, MAX_PATH);
-        HookMsgA("SHGetSpecialFolderPathA Hook Path", lpszPath);
-        return TRUE;
-    } else return OriginalSHGetSpecialFolderPathA(hwndOwner, lpszPath, csidl, fCreate);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && lpszPath) {
+    GetModulePathA(lpszPath, MAX_PATH);
+    DebugMsg("SHGetSpecialFolderPathA Hook Path: %s", lpszPath);
+    return TRUE;
+  } else return OriginalFunc(SHGetSpecialFolderPathA)(hwndOwner, lpszPath, csidl, fCreate);
 }
 
-typedef WINBOOL (WINAPI *pSHGetSpecialFolderPathW) (
-        HWND   hwndOwner,
-        _Out_ LPWSTR lpszPath,
-        _In_  int    csidl,
-        _In_  BOOL   fCreate
+typedef WINBOOL (WINAPI *pSHGetSpecialFolderPathW)(
+    HWND hwndOwner,
+    _Out_ LPWSTR lpszPath,
+    _In_  int csidl,
+    _In_  BOOL fCreate
 );
 
-pSHGetSpecialFolderPathW OriginalSHGetSpecialFolderPathW = NULL;
-
 WINBOOL WINAPI HookSHGetSpecialFolderPathW(
-        HWND   hwndOwner,
-        _Out_ LPWSTR lpszPath,
-        _In_  int    csidl,
-        _In_  BOOL   fCreate
+    HWND hwndOwner,
+    _Out_ LPWSTR lpszPath,
+    _In_  int csidl,
+    _In_  BOOL fCreate
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && lpszPath) {
-        GetModulePathW(lpszPath, MAX_PATH);
-        HookMsgW(L"SHGetSpecialFolderPathW Hook Path", lpszPath);
-        return TRUE;
-    } else return OriginalSHGetSpecialFolderPathW(hwndOwner, lpszPath, csidl, fCreate);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && lpszPath) {
+    GetModulePathW(lpszPath, MAX_PATH);
+    DebugMsg("SHGetSpecialFolderPathW Hook Path: %ls", lpszPath);
+    return TRUE;
+  } else return OriginalFunc(SHGetSpecialFolderPathW)(hwndOwner, lpszPath, csidl, fCreate);
 }
 
 typedef HRESULT (WINAPI *pSHGetSpecialFolderLocation)(
-  HWND             hwnd,
-  int              csidl,
-  PIDLIST_ABSOLUTE *ppidl
+    HWND hwnd,
+    int csidl,
+    PIDLIST_ABSOLUTE *ppidl
 );
 
-pSHGetSpecialFolderLocation OriginalSHGetSpecialFolderLocation = NULL;
-
 HRESULT HookSHGetSpecialFolderLocation(
-  HWND             hwnd,
-  int              csidl,
-  PIDLIST_ABSOLUTE *ppidl
+    HWND hwnd,
+    int csidl,
+    PIDLIST_ABSOLUTE *ppidl
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && ppidl) {
-        WCHAR lpszPath[MAX_PATH] = {0};
-        GetModulePathW(lpszPath, MAX_PATH);
-        HookMsgW(L"SHGetSpecialFolderLocation Hook Path", lpszPath);
-        return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
-    } else return OriginalSHGetSpecialFolderLocation(hwnd, csidl, ppidl);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && ppidl) {
+    WCHAR lpszPath[MAX_PATH] = {0};
+    GetModulePathW(lpszPath, MAX_PATH);
+    DebugMsg("SHGetSpecialFolderLocation Hook Path: %ls", lpszPath);
+    return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+  } else return OriginalFunc(SHGetSpecialFolderLocation)(hwnd, csidl, ppidl);
 }
 
 typedef HRESULT (WINAPI *pSHGetKnownFolderIDList)(
-  REFKNOWNFOLDERID rfid,
-  DWORD            dwFlags,
-  HANDLE           hToken,
-  PIDLIST_ABSOLUTE *ppidl
+    REFKNOWNFOLDERID rfid,
+    DWORD dwFlags,
+    HANDLE hToken,
+    PIDLIST_ABSOLUTE *ppidl
 );
 
-pSHGetKnownFolderIDList OriginalSHGetKnownFolderIDList = NULL;
-
 HRESULT HookSHGetKnownFolderIDList(
-  REFKNOWNFOLDERID rfid,
-  DWORD            dwFlags,
-  HANDLE           hToken,
-  PIDLIST_ABSOLUTE *ppidl
+    REFKNOWNFOLDERID rfid,
+    DWORD dwFlags,
+    HANDLE hToken,
+    PIDLIST_ABSOLUTE *ppidl
 ) {
-    if (isHookRfid(rfid) && ppidl) {
-        WCHAR lpszPath[MAX_PATH] = {0};
-        GetModulePathW(lpszPath, MAX_PATH);
-        HookMsgW(L"SHGetKnownFolderIDList Hook Path", lpszPath);
-        return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
-    } else return OriginalSHGetKnownFolderIDList(rfid, dwFlags, hToken, ppidl);
+  if (isHookRfid(rfid) && ppidl) {
+    WCHAR lpszPath[MAX_PATH] = {0};
+    GetModulePathW(lpszPath, MAX_PATH);
+    DebugMsg("SHGetKnownFolderIDList Hook Path: %ls", lpszPath);
+    return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+  } else return OriginalFunc(SHGetKnownFolderIDList)(rfid, dwFlags, hToken, ppidl);
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirW)(
-  HWND    hwnd,
-  int     csidl,
-  HANDLE  hToken,
-  DWORD   dwFlags,
-  LPCWSTR pszSubDir,
-  LPWSTR  pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPCWSTR pszSubDir,
+    LPWSTR pszPath
 );
 
-pSHGetFolderPathAndSubDirW OriginalSHGetFolderPathAndSubDirW = NULL;
-
 HRESULT HookSHGetFolderPathAndSubDirW(
-  HWND    hwnd,
-  int     csidl,
-  HANDLE  hToken,
-  DWORD   dwFlags,
-  LPCWSTR pszSubDir,
-  LPWSTR  pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPCWSTR pszSubDir,
+    LPWSTR pszPath
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && pszPath) {
-        GetModulePathW(pszPath, MAX_PATH);
-        if (pszSubDir) {
-            wcscat_s(pszPath, MAX_PATH, L"\\");
-            wcscat_s(pszPath, MAX_PATH, pszSubDir);
-            if (csidl & CSIDL_FLAG_CREATE) {
-                return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
-            }
-        }
-        HookMsgW(L"SHGetFolderPathAndSubDirW Hook Path", pszPath);
-        return S_OK;
-    } else return OriginalSHGetFolderPathAndSubDirW(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && pszPath) {
+    GetModulePathW(pszPath, MAX_PATH);
+    if (pszSubDir) {
+      wcscat_s(pszPath, MAX_PATH, L"\\");
+      wcscat_s(pszPath, MAX_PATH, pszSubDir);
+      if (csidl & CSIDL_FLAG_CREATE) {
+        return CreateDirectoryW(pszPath, NULL) ? S_OK : S_FALSE;
+      }
+    }
+    DebugMsg("SHGetFolderPathAndSubDirW Hook Path: %ls", pszPath);
+    return S_OK;
+  } else return OriginalFunc(SHGetFolderPathAndSubDirW)(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirA)(
-  HWND    hwnd,
-  int     csidl,
-  HANDLE  hToken,
-  DWORD   dwFlags,
-  LPCSTR  pszSubDir,
-  LPSTR   pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPCSTR pszSubDir,
+    LPSTR pszPath
 );
 
-pSHGetFolderPathAndSubDirA OriginalSHGetFolderPathAndSubDirA = NULL;
-
 HRESULT HookSHGetFolderPathAndSubDirA(
-  HWND    hwnd,
-  int     csidl,
-  HANDLE  hToken,
-  DWORD   dwFlags,
-  LPCSTR  pszSubDir,
-  LPSTR   pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPCSTR pszSubDir,
+    LPSTR pszPath
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && pszPath) {
-        GetModulePathA(pszPath, MAX_PATH);
-        if (pszSubDir) {
-            strcat_s(pszPath, MAX_PATH, "\\");
-            strcat_s(pszPath, MAX_PATH, pszSubDir);
-            if (csidl & CSIDL_FLAG_CREATE) {
-                return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
-            }
-        }
-        HookMsgA("SHGetFolderPathAndSubDirW Hook Path", pszPath);
-        return S_OK;
-    } else return OriginalSHGetFolderPathAndSubDirA(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && pszPath) {
+    GetModulePathA(pszPath, MAX_PATH);
+    if (pszSubDir) {
+      strcat_s(pszPath, MAX_PATH, "\\");
+      strcat_s(pszPath, MAX_PATH, pszSubDir);
+      if (csidl & CSIDL_FLAG_CREATE) {
+        return CreateDirectoryA(pszPath, NULL) ? S_OK : S_FALSE;
+      }
+    }
+    DebugMsg("SHGetFolderPathAndSubDirW Hook Path: %s", pszPath);
+    return S_OK;
+  } else return OriginalFunc(SHGetFolderPathAndSubDirA)(hwnd, csidl, hToken, dwFlags, pszSubDir, pszPath);
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderPathW)(
-  HWND   hwnd,
-  int    csidl,
-  HANDLE hToken,
-  DWORD  dwFlags,
-  LPWSTR pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPWSTR pszPath
 );
 
-pSHGetFolderPathW OriginalSHGetFolderPathW = NULL;
-
 HRESULT HookSHGetFolderPathW(
-  HWND   hwnd,
-  int    csidl,
-  HANDLE hToken,
-  DWORD  dwFlags,
-  LPWSTR pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPWSTR pszPath
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && pszPath) {
-        GetModulePathW(pszPath, MAX_PATH);
-        HookMsgW(L"SHGetFolderPathW Hook Path", pszPath);
-        return S_OK;
-    } else return OriginalSHGetFolderPathW(hwnd, csidl, hToken, dwFlags, pszPath);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && pszPath) {
+    GetModulePathW(pszPath, MAX_PATH);
+    DebugMsg("SHGetFolderPathW Hook Path: %ls", pszPath);
+    return S_OK;
+  } else return OriginalFunc(SHGetFolderPathW)(hwnd, csidl, hToken, dwFlags, pszPath);
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderPathA)(
-  HWND   hwnd,
-  int    csidl,
-  HANDLE hToken,
-  DWORD  dwFlags,
-  LPSTR  pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPSTR pszPath
 );
 
-pSHGetFolderPathA OriginalSHGetFolderPathA = NULL;
-
 HRESULT HookSHGetFolderPathA(
-  HWND   hwnd,
-  int    csidl,
-  HANDLE hToken,
-  DWORD  dwFlags,
-  LPSTR  pszPath
+    HWND hwnd,
+    int csidl,
+    HANDLE hToken,
+    DWORD dwFlags,
+    LPSTR pszPath
 ) {
-    register int csidlLow = csidl & 0xff;
-    if (isHookCsidl(csidlLow) && pszPath) {
-        GetModulePathA(pszPath, MAX_PATH);
-        HookMsgA("SHGetFolderPathA Hook Path", pszPath);
-        return S_OK;
-    } else return OriginalSHGetFolderPathA(hwnd, csidl, hToken, dwFlags, pszPath);
+  register int csidlLow = csidl & 0xff;
+  if (isHookCsidl(csidlLow) && pszPath) {
+    GetModulePathA(pszPath, MAX_PATH);
+    DebugMsg("SHGetFolderPathA Hook Path: %s", pszPath);
+    return S_OK;
+  } else return OriginalFunc(SHGetFolderPathA)(hwnd, csidl, hToken, dwFlags, pszPath);
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderLocation)(
-  _In_        HWND hwndOwner,
-  _In_        int nFolder,
-  _In_        HANDLE hToken,
-  _Reserved_  DWORD dwReserved,
-  _Out_       PIDLIST_ABSOLUTE *ppidl
+    _In_        HWND hwndOwner,
+    _In_        int nFolder,
+    _In_        HANDLE hToken,
+    _Reserved_  DWORD dwReserved,
+    _Out_       PIDLIST_ABSOLUTE *ppidl
 );
 
-pSHGetFolderLocation OriginalSHGetFolderLocation = NULL;
 
 HRESULT HookSHGetFolderLocation(
-  _In_        HWND hwndOwner,
-  _In_        int nFolder,
-  _In_        HANDLE hToken,
-  _Reserved_  DWORD dwReserved,
-  _Out_       PIDLIST_ABSOLUTE *ppidl
+    _In_        HWND hwndOwner,
+    _In_        int nFolder,
+    _In_        HANDLE hToken,
+    _Reserved_  DWORD dwReserved,
+    _Out_       PIDLIST_ABSOLUTE *ppidl
 ) {
-    register int csidlLow = nFolder & 0xff;
-    if (isHookCsidl(csidlLow) && ppidl) {
-        WCHAR lpszPath[MAX_PATH] = {0};
-        GetModulePathW(lpszPath, MAX_PATH);
-        HookMsgW("SHGetFolderLocation Hook Path", lpszPath);
-        return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
-    } else return OriginalSHGetFolderLocation(hwndOwner, nFolder, hToken, dwReserved, ppidl);
+  register int csidlLow = nFolder & 0xff;
+  if (isHookCsidl(csidlLow) && ppidl) {
+    WCHAR lpszPath[MAX_PATH] = {0};
+    GetModulePathW(lpszPath, MAX_PATH);
+    DebugMsg("SHGetFolderLocation Hook Path: %ls", lpszPath);
+    return SHParseDisplayName(lpszPath, NULL, ppidl, SFGAO_FILESYSTEM, NULL);
+  } else return OriginalFunc(SHGetFolderLocation)(hwndOwner, nFolder, hToken, dwReserved, ppidl);
 }
 
 typedef HRESULT (WINAPI *pSHGetFolderPathEx)(
-  _In_     REFKNOWNFOLDERID rfid,
-  _In_     DWORD            dwFlags,
-  _In_opt_ HANDLE           hToken,
-  _Out_    LPWSTR           pszPath,
-  _In_     UINT             cchPath
+    _In_     REFKNOWNFOLDERID rfid,
+    _In_     DWORD dwFlags,
+    _In_opt_ HANDLE hToken,
+    _Out_    LPWSTR pszPath,
+    _In_     UINT cchPath
 );
 
-pSHGetFolderPathEx OriginalSHGetFolderPathEx = NULL;
-
 HRESULT HookSHGetFolderPathEx(
-  _In_     REFKNOWNFOLDERID rfid,
-  _In_     DWORD            dwFlags,
-  _In_opt_ HANDLE           hToken,
-  _Out_    LPWSTR           pszPath,
-  _In_     UINT             cchPath
+    _In_     REFKNOWNFOLDERID rfid,
+    _In_     DWORD dwFlags,
+    _In_opt_ HANDLE hToken,
+    _Out_    LPWSTR pszPath,
+    _In_     UINT cchPath
 ) {
-    if (isHookRfid(rfid) && pszPath) {
-        GetModulePathW(pszPath, cchPath);
-        HookMsgW("SHGetFolderPathEx Hook Path", pszPath);
-        return S_OK;
-    } else return OriginalSHGetFolderPathEx(rfid, dwFlags, hToken, pszPath, cchPath);
+  if (isHookRfid(rfid) && pszPath) {
+    GetModulePathW(pszPath, cchPath);
+    DebugMsg("SHGetFolderPathEx Hook Path: %ls", pszPath);
+    return S_OK;
+  } else return OriginalFunc(SHGetFolderPathEx)(rfid, dwFlags, hToken, pszPath, cchPath);
 }
 
-void DLLHijackAttach(bool isSucceed) {
-    if (isSucceed) {
-        MH_Initialize();
-        HookMsg((DLL_NAME " DLL Hijack Attach"), "DLL Hijack Attach Succeed!");
-        HMODULE shell32 = LoadLibrary((LPCTSTR) _T("shell32.dll"));
+#define DefineHook(name) {NULL, Hook ## name, #name}
+static HookTableSt HookTable[] = {
+    DefineHook(SHGetKnownFolderPath),
+    DefineHook(SHGetSpecialFolderPathW),
+    DefineHook(SHGetSpecialFolderPathA),
+    DefineHook(SHGetSpecialFolderLocation),
+    DefineHook(SHGetKnownFolderIDList),
+    DefineHook(SHGetFolderPathAndSubDirW),
+    DefineHook(SHGetFolderPathAndSubDirA),
+    DefineHook(SHGetFolderPathW),
+    DefineHook(SHGetFolderPathA),
+    DefineHook(SHGetFolderLocation),
+    DefineHook(SHGetFolderPathEx)
+};
+#undef DefineHook
 
-        DoMinHook(shell32, SHGetKnownFolderPath);
-        DoMinHook(shell32, SHGetSpecialFolderPathW);
-        DoMinHook(shell32, SHGetSpecialFolderPathA);
-        DoMinHook(shell32, SHGetSpecialFolderLocation);
-        DoMinHook(shell32, SHGetKnownFolderIDList);
-        DoMinHook(shell32, SHGetFolderPathAndSubDirW);
-        DoMinHook(shell32, SHGetFolderPathAndSubDirA);
-        DoMinHook(shell32, SHGetFolderPathW);
-        DoMinHook(shell32, SHGetFolderPathA);
-        DoMinHook(shell32, SHGetFolderLocation);
-        DoMinHook(shell32, SHGetFolderPathEx);
+void DLLHijackAttach(bool isSucceed) {
+  if (isSucceed && InitModulePath()) {
+    MH_STATUS initStatus = MH_Initialize();
+    DebugMsg(DLL_NAME " DLL Hijack Attach Succeed");
+    if (initStatus != MH_OK) {
+      DebugMsg("MinHook init failed: %d", initStatus);
+      return;
     }
+    HMODULE shell32 = LdrLoadLibraryW((LPCWSTR) L"shell32.dll");
+    for (unsigned i = 0; i < _HookLength; ++i) {
+      void *func = LdrGetProcAddressA(shell32, HookTable[i].name);
+      if (!func) {
+        DebugMsg("Hook at %s failed: original func not found", HookTable[i].name);
+        continue;
+      }
+      MH_STATUS status = MH_CreateHook(func, HookTable[i].hook, HookTable[i].original);
+      if (status != MH_OK) {
+        DebugMsg("Hook at %s failed: MH_CreateHook fail %d", HookTable[i].name, status);
+        continue;
+      }
+      status = MH_EnableHook(func);
+      if (status != MH_OK) {
+        DebugMsg("Hook at %s failed: MH_EnableHook fail %d", HookTable[i].name, status);
+      }
+    }
+  }
 }
 
 void DLLHijackDetach(bool isSucceed) {
-    if (isSucceed) {
-        MH_Uninitialize();
-        HookMsg((DLL_NAME " DLL Hijack Detach"), "DLL Hijack Detach Succeed!");
-    }
+  if (isSucceed) {
+    MH_Uninitialize();
+    DebugMsg(DLL_NAME " DLL Hijack DetachSucceed");
+  }
 }

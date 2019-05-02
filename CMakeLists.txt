@@ -19,7 +19,7 @@ endif ()
 
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     set(CMAKE_C_FLAGS "-pipe -Wall -Wextra -nostartfiles -Wl,--gc-sections,--build-id=none")
-    set(CMAKE_C_FLAGS_DEBUG "-g")
+    set(CMAKE_C_FLAGS_DEBUG "-g -D_DEBUG")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -s")
     if (CMAKE_SIZEOF_VOID_P EQUAL 4)
         set(CMAKE_C_FLAGS_RELEASE "-Os -s")
