@@ -83,8 +83,8 @@ static bool InitModulePath(void) {
     paths.lengthW = sizeW / sizeof(wchar_t);
   }
 
-  ANSI_STRING pathA = {0, MAX_PATH, paths.pathA};
-  UNICODE_STRING pathW = {sizeW, MAX_PATH * sizeof(wchar_t), paths.pathW};
+  ANSI_STRING pathA = {0, sizeof(paths.pathA), paths.pathA};
+  UNICODE_STRING pathW = {sizeW, sizeof(paths.pathW), paths.pathW};
   if (!NT_SUCCESS(RtlUnicodeStringToAnsiString(&pathA, &pathW, FALSE))) {
     return false;
   }
@@ -103,6 +103,7 @@ static DWORD GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
   if (!pDirBuf || !bufSize) return 0;
   const DWORD size = min(bufSize, paths.lengthA);
   memcpy(pDirBuf, paths.pathA, size);
+  pDirBuf[size] = '\0';
   return size;
 }
 
@@ -116,6 +117,7 @@ static DWORD GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
   if (!pDirBuf || !bufSize) return 0;
   const DWORD size = min(bufSize, paths.lengthW);
   memcpy(pDirBuf, paths.pathW, size * sizeof(wchar_t));
+  pDirBuf[size] = '\0';
   return size;
 }
 
