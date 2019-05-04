@@ -442,7 +442,7 @@ void DLLHijackAttach(bool isSucceed) {
         DebugMsg("Hook at %s failed: original func not found", HookTable[i].name);
         continue;
       }
-      MH_STATUS status = MH_CreateHook(func, HookTable[i].hook, HookTable[i].original);
+      MH_STATUS status = MH_CreateHook(func, HookTable[i].hook, &HookTable[i].original);
       if (status != MH_OK) {
         DebugMsg("Hook at %s failed: MH_CreateHook fail %d", HookTable[i].name, status);
         continue;
