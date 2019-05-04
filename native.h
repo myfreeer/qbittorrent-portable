@@ -17,7 +17,7 @@ typedef struct _HookTable {
   void *original;
   void *hook;
   char *name;
-} HookTableSt;
+} HookTable;
 
 typedef struct _ModulePathBuffer {
   size_t lengthA;
@@ -26,22 +26,6 @@ typedef struct _ModulePathBuffer {
   wchar_t pathW[MAX_PATH];
 } ModulePathBuffer;
 
-NTSYSAPI NTSTATUS RtlUnicodeToMultiByteN(
-    PCHAR MultiByteString,
-    ULONG MaxBytesInMultiByteString,
-    PULONG BytesInMultiByteString,
-    PCWCH UnicodeString,
-    ULONG BytesInUnicodeString
-);
-
-NTSYSAPI NTSTATUS RtlMultiByteToUnicodeN(
-    PWCH UnicodeString,
-    ULONG MaxBytesInUnicodeString,
-    PULONG BytesInUnicodeString,
-    const CHAR *MultiByteString,
-    ULONG BytesInMultiByteString
-);
-
 static bool NtCreateDirectoryW(PCWSTR pszFileName) {
   NTSTATUS Status;
   UNICODE_STRING FileName;
@@ -49,20 +33,25 @@ static bool NtCreateDirectoryW(PCWSTR pszFileName) {
   IO_STATUS_BLOCK IoStatus;
   OBJECT_ATTRIBUTES ObjectAttributes;
 
-  RtlInitUnicodeString(&FileName, pszFileName);
-  InitializeObjectAttributes(&ObjectAttributes, &FileName, 0, NULL, NULL);
+  if (!RtlDosPathNameToNtPathName_U(pszFileName, &FileName, NULL, NULL)) {
+    return false;
+  }
+
+  InitializeObjectAttributes(&ObjectAttributes, &FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
   Status = NtCreateFile(&DirectoryHandle,
-                        GENERIC_READ | GENERIC_WRITE,
+                        FILE_LIST_DIRECTORY | SYNCHRONIZE,
                         &ObjectAttributes,
                         &IoStatus,
                         NULL,
                         FILE_ATTRIBUTE_NORMAL,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
                         FILE_CREATE,
-                        FILE_DIRECTORY_FILE,
+                        FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
                         NULL,
                         0);
+
+  RtlFreeUnicodeString(&FileName);
 
   if (NT_SUCCESS(Status)) {
     NtClose(DirectoryHandle);
@@ -71,7 +60,7 @@ static bool NtCreateDirectoryW(PCWSTR pszFileName) {
   return false;
 }
 
-static bool NtCreateDirectoryA(PCSTR pszFileName) {
+static inline bool NtCreateDirectoryA(PCSTR pszFileName) {
   WCHAR buffer[MAX_PATH];
   UNICODE_STRING pathW = {0, MAX_PATH * sizeof(wchar_t), buffer};
   ANSI_STRING pathA;
@@ -83,23 +72,23 @@ static bool NtCreateDirectoryA(PCSTR pszFileName) {
 }
 
 static void *LdrGetDllFunction(const wchar_t *dll, const char *fn) {
-  UNICODE_STRING dllu;
-  RtlInitUnicodeString(&dllu, dll);
+  UNICODE_STRING dllName;
+  RtlInitUnicodeString(&dllName, dll);
 
   PVOID handle;
-  NTSTATUS status = LdrGetDllHandle(NULL, NULL, &dllu, &handle);
+  NTSTATUS status = LdrGetDllHandle(NULL, NULL, &dllName, &handle);
 
   if (!NT_SUCCESS(status))
-    status = LdrLoadDll(NULL, NULL, &dllu, &handle);
+    status = LdrLoadDll(NULL, NULL, &dllName, &handle);
 
   if (!NT_SUCCESS(status))
     return NULL;
 
-  ANSI_STRING fna;
-  RtlInitAnsiString(&fna, fn);
+  ANSI_STRING fnName;
+  RtlInitAnsiString(&fnName, fn);
 
   PVOID proc;
-  status = LdrGetProcedureAddress(handle, &fna, 0, &proc);
+  status = LdrGetProcedureAddress(handle, &fnName, 0, &proc);
 
   return NT_SUCCESS(status) ? proc : NULL;
 }

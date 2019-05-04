@@ -42,9 +42,9 @@ static bool isHookRfid(const GUID *rfid) {
 
 
 static ModulePathBuffer paths = {0};
-pCoTaskMemAlloc pfnCoTaskMemAlloc = NULL;
-pSHParseDisplayName pfnSHParseDisplayName = NULL;
-static HookTableSt HookTable[];
+static pCoTaskMemAlloc pfnCoTaskMemAlloc = NULL;
+static pSHParseDisplayName pfnSHParseDisplayName = NULL;
+static HookTable hookTable[];
 
 #define DefineHook(name) name ## Index
 enum _HookTableIndex {
@@ -62,7 +62,7 @@ enum _HookTableIndex {
   _HookLength
 };
 #undef DefineHook
-#define OriginalFunc(func) ((p ## func)(HookTable[func ## Index].original))
+#define OriginalFunc(func) ((p ## func)(hookTable[func ## Index].original))
 
 static bool InitModulePath(void) {
   PTEB teb = NtCurrentTeb();
@@ -88,7 +88,7 @@ static bool InitModulePath(void) {
   if (!NT_SUCCESS(RtlUnicodeStringToAnsiString(&pathA, &pathW, FALSE))) {
     return false;
   }
-  paths.lengthA = pathA.Length / sizeof(char);
+  paths.lengthA = pathA.Length;
 
   return true;
 }
@@ -109,14 +109,14 @@ static DWORD GetModulePathA(CHAR *pDirBuf, DWORD bufSize) {
 /**
  * GetModulePathW
  * @param {WCHAR *} pDirBuf - destination buffer
- * @param {DWORD} bufSize - size of buffer
+ * @param {DWORD} bufSize - size of buffer, in WCHARs
  * @return {DWORD} length of module path, 0 for failure
  */
 static DWORD GetModulePathW(WCHAR *pDirBuf, DWORD bufSize) {
   if (!pDirBuf || !bufSize) return 0;
-  const DWORD size = min(bufSize, paths.lengthW * sizeof(wchar_t));
-  memcpy(pDirBuf, paths.pathW, size);
-  return size / sizeof(wchar_t);
+  const DWORD size = min(bufSize, paths.lengthW);
+  memcpy(pDirBuf, paths.pathW, size * sizeof(wchar_t));
+  return size;
 }
 
 typedef HRESULT (WINAPI *pSHGetKnownFolderPath)(
@@ -412,7 +412,7 @@ HRESULT HookSHGetFolderPathEx(
 }
 
 #define DefineHook(name) {NULL, Hook ## name, #name}
-static HookTableSt HookTable[] = {
+static HookTable hookTable[] = {
     DefineHook(SHGetKnownFolderPath),
     DefineHook(SHGetSpecialFolderPathW),
     DefineHook(SHGetSpecialFolderPathA),
@@ -437,19 +437,19 @@ void DLLHijackAttach(bool isSucceed) {
     }
     HMODULE shell32 = LdrLoadLibraryW((LPCWSTR) L"shell32.dll");
     for (unsigned i = 0; i < _HookLength; ++i) {
-      void *func = LdrGetProcAddressA(shell32, HookTable[i].name);
+      void *func = LdrGetProcAddressA(shell32, hookTable[i].name);
       if (!func) {
-        DebugMsg("Hook at %s failed: original func not found", HookTable[i].name);
+        DebugMsg("Hook at %s failed: original func not found", hookTable[i].name);
         continue;
       }
-      MH_STATUS status = MH_CreateHook(func, HookTable[i].hook, &HookTable[i].original);
+      MH_STATUS status = MH_CreateHook(func, hookTable[i].hook, &hookTable[i].original);
       if (status != MH_OK) {
-        DebugMsg("Hook at %s failed: MH_CreateHook fail %d", HookTable[i].name, status);
+        DebugMsg("Hook at %s failed: MH_CreateHook fail %d", hookTable[i].name, status);
         continue;
       }
       status = MH_EnableHook(func);
       if (status != MH_OK) {
-        DebugMsg("Hook at %s failed: MH_EnableHook fail %d", HookTable[i].name, status);
+        DebugMsg("Hook at %s failed: MH_EnableHook fail %d", hookTable[i].name, status);
       }
     }
   }
