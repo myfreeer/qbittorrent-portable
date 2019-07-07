@@ -105,9 +105,9 @@ int mainCRTStartup() {
     ILFree(pidl);
     pidl = 0;
 
-    SHGetFolderPathAndSubDirW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, NULL, pathW);
+    SHGetFolderPathAndSubDirW(NULL, CSIDL_APPDATA | CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, L"sub1", pathW);
     showInfoW("SHGetFolderPathAndSubDirW");
-    SHGetFolderPathAndSubDirA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, NULL, pathA);
+    SHGetFolderPathAndSubDirA(NULL, CSIDL_APPDATA | CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, "sub2", pathA);
     showInfoA("SHGetFolderPathAndSubDirA");
 
     SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, pathW);

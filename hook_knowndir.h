@@ -67,13 +67,10 @@ enum _HookTableIndex {
 static bool InitModulePath(void) {
   PTEB teb = NtCurrentTeb();
   // PEB->ImageBaseAddress
-  HANDLE hModule = teb->ProcessEnvironmentBlock->Reserved3[1];
-  PLDR_DATA_TABLE_ENTRY pEntry;
-  if (!NT_SUCCESS(LdrFindEntryForAddress(hModule, &pEntry))) {
-    return false;
-  }
-  size_t sizeW = min(sizeof(paths.pathW), pEntry->FullDllName.Length);
-  memcpy(paths.pathW, pEntry->FullDllName.Buffer, sizeW);
+  UNICODE_STRING * imagePathName =
+      &teb->ProcessEnvironmentBlock->ProcessParameters->ImagePathName;
+  size_t sizeW = min(sizeof(paths.pathW), imagePathName->Length);
+  memcpy(paths.pathW, imagePathName->Buffer, sizeW);
   wchar_t *pathEnd = wcsrchr(paths.pathW, L'\\');
   if (pathEnd) {
     *pathEnd = 0;
