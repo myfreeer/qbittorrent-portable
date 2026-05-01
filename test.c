@@ -32,6 +32,11 @@ HRESULT WINAPI SHGetFolderPathEx(
   _In_     UINT             cchPath
 );
 
+int __cdecl atexit(void (__cdecl * unused)(void)) {
+    (void) unused;
+    return 0;
+}
+
 /**
  * GetModulePathA
  * @param {CHAR *} pDirBuf - destination buffer
