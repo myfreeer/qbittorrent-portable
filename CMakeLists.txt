@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 project(qbittorrent-portable C)
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -41,12 +41,26 @@ endif ()
 set (CMAKE_SHARED_LIBRARY_PREFIX "")
 set (CMAKE_SHARED_MODULE_PREFIX "")
 set (SRC hook_knowndir.h native.h dll-hijack/hijack.h dll-hijack/native_api.h)
-aux_source_directory(minhook/src MinHook)
-aux_source_directory(minhook/src/hde MinHook)
+set(SOURCES_MINHOOK
+  "minhook/src/buffer.c"
+  "minhook/src/hook.c"
+  "minhook/src/trampoline.c"
+  "minhook/src/buffer_native.h"
+  "minhook/src/thread_native.h"
+  "minhook/src/ldr_native.h"
+)
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(SOURCES_HDE "minhook/src/hde/hde64.c")
+else()
+  set(SOURCES_HDE "minhook/src/hde/hde32.c")
+endif()
+add_library(minhook STATIC ${SOURCES_MINHOOK} ${SOURCES_HDE})
+link_libraries(minhook)
 find_library(sys_version NAMES version)
-add_library(version SHARED version.c dll-hijack/version.h dll-hijack/version.def ${SRC} ${MinHook})
-add_library(iphlpapi SHARED iphlpapi.c dll-hijack/iphlpapi.h dll-hijack/iphlpapi.def  ${SRC} ${MinHook})
-add_library(winmm SHARED winmm.c dll-hijack/winmm.h dll-hijack/winmm.def  ${SRC} ${MinHook})
+add_library(version SHARED version.c dll-hijack/version.h dll-hijack/version.def ${SRC})
+add_library(iphlpapi SHARED iphlpapi.c dll-hijack/iphlpapi.h dll-hijack/iphlpapi.def ${SRC})
+add_library(winmm SHARED winmm.c dll-hijack/winmm.h dll-hijack/winmm.def ${SRC})
 if (ENABLE_TESTS)
     enable_testing()
     add_executable(dir_test test.c)
