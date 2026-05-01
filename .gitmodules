@@ -1,6 +1,7 @@
 [submodule "minhook"]
 	path = minhook
 	url = https://github.com/myfreeer/minhook.git
+	branch = fork
 [submodule "dll-hijack"]
 	path = dll-hijack
 	url = https://github.com/myfreeer/dll-hijack.git
