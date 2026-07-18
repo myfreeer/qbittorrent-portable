@@ -200,7 +200,7 @@ typedef HRESULT (WINAPI *pSHGetSpecialFolderLocation)(
     PIDLIST_ABSOLUTE *ppidl
 );
 
-HRESULT HookSHGetSpecialFolderLocation(
+HRESULT WINAPI HookSHGetSpecialFolderLocation(
     HWND hwnd,
     int csidl,
     PIDLIST_ABSOLUTE *ppidl
@@ -227,7 +227,7 @@ typedef HRESULT (WINAPI *pSHGetKnownFolderIDList)(
     PIDLIST_ABSOLUTE *ppidl
 );
 
-HRESULT HookSHGetKnownFolderIDList(
+HRESULT WINAPI HookSHGetKnownFolderIDList(
     REFKNOWNFOLDERID rfid,
     DWORD dwFlags,
     HANDLE hToken,
@@ -256,7 +256,7 @@ typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirW)(
     LPWSTR pszPath
 );
 
-HRESULT HookSHGetFolderPathAndSubDirW(
+HRESULT WINAPI HookSHGetFolderPathAndSubDirW(
     HWND hwnd,
     int csidl,
     HANDLE hToken,
@@ -288,7 +288,7 @@ typedef HRESULT (WINAPI *pSHGetFolderPathAndSubDirA)(
     LPSTR pszPath
 );
 
-HRESULT HookSHGetFolderPathAndSubDirA(
+HRESULT WINAPI HookSHGetFolderPathAndSubDirA(
     HWND hwnd,
     int csidl,
     HANDLE hToken,
@@ -319,7 +319,7 @@ typedef HRESULT (WINAPI *pSHGetFolderPathW)(
     LPWSTR pszPath
 );
 
-HRESULT HookSHGetFolderPathW(
+HRESULT WINAPI HookSHGetFolderPathW(
     HWND hwnd,
     int csidl,
     HANDLE hToken,
@@ -342,7 +342,7 @@ typedef HRESULT (WINAPI *pSHGetFolderPathA)(
     LPSTR pszPath
 );
 
-HRESULT HookSHGetFolderPathA(
+HRESULT WINAPI HookSHGetFolderPathA(
     HWND hwnd,
     int csidl,
     HANDLE hToken,
@@ -366,7 +366,7 @@ typedef HRESULT (WINAPI *pSHGetFolderLocation)(
 );
 
 
-HRESULT HookSHGetFolderLocation(
+HRESULT WINAPI HookSHGetFolderLocation(
     _In_        HWND hwndOwner,
     _In_        int nFolder,
     _In_        HANDLE hToken,
@@ -396,7 +396,7 @@ typedef HRESULT (WINAPI *pSHGetFolderPathEx)(
     _In_     UINT cchPath
 );
 
-HRESULT HookSHGetFolderPathEx(
+HRESULT WINAPI HookSHGetFolderPathEx(
     _In_     REFKNOWNFOLDERID rfid,
     _In_     DWORD dwFlags,
     _In_opt_ HANDLE hToken,
