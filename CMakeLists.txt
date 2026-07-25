@@ -57,7 +57,13 @@ else()
 endif()
 add_library(minhook STATIC ${SOURCES_MINHOOK} ${SOURCES_HDE})
 link_libraries(minhook)
-find_library(sys_version NAMES version)
+# Search only the toolchain's own (arch-correct) link directories so a 32-bit
+# build resolves the 32-bit import lib and does not accidentally pick up the
+# 64-bit one from a mixed msys2 PATH (which silently breaks the x86 dir_test link).
+find_library(sys_version NAMES version PATHS ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES} NO_DEFAULT_PATH)
+if (NOT sys_version)
+    find_library(sys_version NAMES version)
+endif ()
 add_library(version SHARED version.c dll-hijack/version.h dll-hijack/version.def ${SRC})
 add_library(iphlpapi SHARED iphlpapi.c dll-hijack/iphlpapi.h dll-hijack/iphlpapi.def ${SRC})
 add_library(winmm SHARED winmm.c dll-hijack/winmm.h dll-hijack/winmm.def ${SRC})
@@ -65,6 +71,18 @@ if (ENABLE_TESTS)
     enable_testing()
     add_executable(dir_test test.c)
     target_link_libraries(dir_test shell32 "${sys_version}" uuid ole32)
+    # dir_test statically imports version.dll; the loader resolves it from the
+    # executable's own directory, so the hijack shim must be built and sitting
+    # next to dir_test.exe before the test runs. Force both into the same dir
+    # and make the shim a build dependency of the test.
+    set_target_properties(dir_test version PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    add_dependencies(dir_test version)
+    # CTest gate: dir_test exits non-zero on any ABI/liveness/path failure, and
+    # hard-fails if the shim installed no hooks (result would be meaningless).
+    add_test(NAME dir_test COMMAND dir_test)
+    # Convenience target for a manual run outside ctest.
     add_custom_target(check
         COMMAND dir_test
         DEPENDS dir_test version
